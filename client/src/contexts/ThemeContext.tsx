@@ -22,6 +22,15 @@ export function ThemeProvider({
   switchable = false,
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
+    // Check if Black Glass theme should be active (Feb 17 - Apr 30, 2026)
+    const now = new Date();
+    const launchDate = new Date('2026-02-17T00:00:00');
+    const expiryDate = new Date('2026-04-30T23:59:59');
+    
+    if (now >= launchDate && now <= expiryDate) {
+      return "dark"; // Black Glass uses dark theme
+    }
+    
     if (switchable) {
       const stored = localStorage.getItem("theme");
       return (stored as Theme) || defaultTheme;

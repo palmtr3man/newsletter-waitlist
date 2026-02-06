@@ -1,17 +1,20 @@
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { Plane, Users, Share2 } from "lucide-react";
+import { Plane, Users, Share2, AlertCircle, CheckCircle } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 /**
- * Newsletter Waitlist Landing Page
- * 
+ * Newsletter Waitlist Landing Page with Stripe Payment
+ *
  * Design: Retro-Futuristic Airport Terminal
  * - Departure board aesthetic with flip-text animations
  * - Glassmorphic form cards with cyan neon accents
  * - Aviation-themed boarding pass confirmation
  * - Real-time queue position tracking
+ * - Stripe $0.01 payment integration
  */
 
 interface FormState {
@@ -20,6 +23,7 @@ interface FormState {
   submitted: boolean;
   queuePosition: number;
   totalPassengers: number;
+  paymentStatus: "pending" | "completed" | "failed" | "skipped";
 }
 
 export default function Home() {
@@ -28,30 +32,67 @@ export default function Home() {
     firstName: "",
     submitted: false,
     queuePosition: 0,
-    totalPassengers: 247,
+    totalPassengers: 0,
+    paymentStatus: "pending",
   });
 
   const [errors, setErrors] = useState<{ email?: string }>({});
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Simulate queue position assignment
+  // tRPC mutations
+  const createCheckoutMutation = trpc.payment.createCheckout.useMutation();
+  const confirmPaymentMutation = trpc.payment.confirmPayment.useMutation();
+  const joinWithoutPaymentMutation = trpc.payment.joinWaitlistWithoutPayment.useMutation();
+  const getTotalCountQuery = trpc.payment.getTotalCount.useQuery();
+
+  // Update total passengers count
   useEffect(() => {
-    if (formState.submitted) {
-      // Simulate API call to get queue position
-      const newPosition = formState.totalPassengers + 1;
+    if (getTotalCountQuery.data) {
       setFormState((prev) => ({
         ...prev,
-        queuePosition: newPosition,
-        totalPassengers: newPosition,
+        totalPassengers: getTotalCountQuery.data || 0,
       }));
     }
-  }, [formState.submitted]);
+  }, [getTotalCountQuery.data]);
+
+  // Check for payment success on page load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+
+    if (sessionId) {
+      handlePaymentSuccess(sessionId);
+    }
+  }, []);
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handlePaymentSuccess = async (sessionId: string) => {
+    try {
+      const result = await confirmPaymentMutation.mutateAsync({ sessionId });
+      setFormState((prev) => ({
+        ...prev,
+        submitted: true,
+        queuePosition: result.queuePosition,
+        paymentStatus: "completed",
+        email: result.email,
+      }));
+      toast.success("Payment successful! Welcome aboard!");
+      // Clear URL params
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (error) {
+      toast.error("Failed to confirm payment. Please try again.");
+      setFormState((prev) => ({
+        ...prev,
+        paymentStatus: "failed",
+      }));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { email?: string } = {};
 
@@ -66,19 +107,49 @@ export default function Home() {
       return;
     }
 
-    // Check localStorage for duplicate
-    const storedEmail = localStorage.getItem("newsletter-email");
-    if (storedEmail === formState.email) {
-      setErrors({ email: "You're already on the waitlist!" });
-      return;
-    }
-
-    // Save to localStorage
-    localStorage.setItem("newsletter-email", formState.email);
-    localStorage.setItem("newsletter-name", formState.firstName);
-
+    setIsLoading(true);
     setErrors({});
-    setFormState((prev) => ({ ...prev, submitted: true }));
+
+    try {
+      // Create Stripe checkout session
+      const result = await createCheckoutMutation.mutateAsync({
+        email: formState.email,
+        firstName: formState.firstName,
+      });
+
+      // Open Stripe checkout in new tab
+      if (result.checkoutUrl) {
+        window.open(result.checkoutUrl, "_blank");
+        toast.info("Opening payment page in a new window...");
+      }
+    } catch (error) {
+      toast.error("Failed to create payment session. Please try again.");
+      setErrors({ email: "Payment setup failed" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSkipPayment = async () => {
+    setIsLoading(true);
+    try {
+      const result = await joinWithoutPaymentMutation.mutateAsync({
+        email: formState.email,
+        firstName: formState.firstName,
+      });
+
+      setFormState((prev) => ({
+        ...prev,
+        submitted: true,
+        queuePosition: result.queuePosition,
+        paymentStatus: "skipped",
+      }));
+      toast.info("Added to waitlist! (Payment skipped)");
+    } catch (error) {
+      toast.error("Failed to join waitlist. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleShare = () => {
@@ -90,8 +161,20 @@ export default function Home() {
       });
     } else {
       navigator.clipboard.writeText(text);
-      alert("Link copied to clipboard!");
+      toast.success("Link copied to clipboard!");
     }
+  };
+
+  const handleReset = () => {
+    setFormState({
+      email: "",
+      firstName: "",
+      submitted: false,
+      queuePosition: 0,
+      totalPassengers: getTotalCountQuery.data || 0,
+      paymentStatus: "pending",
+    });
+    setErrors({});
   };
 
   if (formState.submitted) {
@@ -102,6 +185,22 @@ export default function Home() {
           <div className="mb-8 animate-in slide-in-from-left duration-600">
             <Card className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 p-8 backdrop-blur-xl">
               <div className="space-y-6">
+                {/* Payment Status Badge */}
+                <div className="flex items-center gap-2 mb-4">
+                  {formState.paymentStatus === "completed" && (
+                    <>
+                      <CheckCircle className="w-5 h-5 text-green-400" />
+                      <span className="text-green-400 font-mono text-sm">PAYMENT VERIFIED</span>
+                    </>
+                  )}
+                  {formState.paymentStatus === "skipped" && (
+                    <>
+                      <AlertCircle className="w-5 h-5 text-yellow-400" />
+                      <span className="text-yellow-400 font-mono text-sm">WAITLIST ONLY</span>
+                    </>
+                  )}
+                </div>
+
                 {/* Boarding Pass Header */}
                 <div className="border-b border-cyan-500/20 pb-4">
                   <div className="text-cyan-400 font-mono text-sm mb-2">BOARDING PASS</div>
@@ -109,83 +208,65 @@ export default function Home() {
                     {formState.firstName || "Passenger"}
                   </h2>
                   <p className="text-cyan-400/80 font-mono text-sm mt-1">
-                    Flight: ULTIMATE-JOURNEY-2026
+                    {formState.email}
                   </p>
                 </div>
 
-                {/* Passenger Details */}
-                <div className="grid grid-cols-2 gap-6">
+                {/* Flight Details */}
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-white/50 text-xs font-mono mb-1">PASSENGER NO.</p>
-                    <p className="text-2xl font-bold text-cyan-400">
-                      #{formState.queuePosition}
-                    </p>
+                    <p className="text-cyan-400/60 text-xs font-mono mb-1">FLIGHT</p>
+                    <p className="text-white font-bold">ULTIMATE-JOURNEY-2026</p>
                   </div>
                   <div>
-                    <p className="text-white/50 text-xs font-mono mb-1">STATUS</p>
-                    <p className="text-2xl font-bold text-cyan-400">PRE-BOARDING</p>
+                    <p className="text-cyan-400/60 text-xs font-mono mb-1">DEPARTURE</p>
+                    <p className="text-white font-bold">March 2026</p>
                   </div>
                   <div>
-                    <p className="text-white/50 text-xs font-mono mb-1">DEPARTURE</p>
-                    <p className="text-lg font-mono text-white">March 2026</p>
+                    <p className="text-cyan-400/60 text-xs font-mono mb-1">SEAT</p>
+                    <p className="text-white font-bold">#{formState.queuePosition}</p>
                   </div>
                   <div>
-                    <p className="text-white/50 text-xs font-mono mb-1">EMAIL</p>
-                    <p className="text-sm font-mono text-white break-all">
-                      {formState.email}
-                    </p>
+                    <p className="text-cyan-400/60 text-xs font-mono mb-1">GATE</p>
+                    <p className="text-white font-bold">BOARDING</p>
                   </div>
                 </div>
 
-                {/* Queue Info */}
-                <div className="bg-cyan-500/5 border border-cyan-500/20 rounded p-4">
-                  <p className="text-white/80 text-sm">
-                    You're passenger <span className="text-cyan-400 font-bold">#{formState.queuePosition}</span> waiting to board.
-                  </p>
-                  <p className="text-white/60 text-xs mt-2">
-                    Estimated departure: March 2026. We'll send you early access when we launch!
-                  </p>
+                {/* Barcode */}
+                <div className="bg-cyan-500/10 p-4 rounded border border-cyan-500/20">
+                  <div className="font-mono text-xs text-cyan-400/60 text-center">
+                    ▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌
+                  </div>
                 </div>
               </div>
             </Card>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-4 justify-center flex-wrap">
+          <div className="space-y-4">
             <Button
               onClick={handleShare}
-              className="bg-cyan-500 hover:bg-cyan-600 text-black font-semibold px-6 py-2 flex items-center gap-2"
+              className="w-full bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-400 font-semibold py-6 rounded-lg transition-all"
             >
-              <Share2 size={18} />
+              <Share2 className="w-4 h-4 mr-2" />
               Invite Others
             </Button>
+
             <Button
-              onClick={() => {
-                setFormState({
-                  email: "",
-                  firstName: "",
-                  submitted: false,
-                  queuePosition: 0,
-                  totalPassengers: formState.totalPassengers,
-                });
-              }}
-              variant="outline"
-              className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 font-semibold px-6 py-2"
+              onClick={handleReset}
+              className="w-full bg-slate-700/50 hover:bg-slate-700/70 border border-slate-600 text-white font-semibold py-6 rounded-lg transition-all"
             >
               Add Another Email
             </Button>
           </div>
 
-          {/* Progress Stats */}
-          <div className="mt-12 text-center">
-            <div className="inline-block bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-6">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <Users size={20} className="text-cyan-400" />
-                <span className="text-white/80">Total Passengers Ready to Board</span>
-              </div>
-              <p className="text-4xl font-bold text-cyan-400">
-                {formState.totalPassengers}
-              </p>
+          {/* Passenger Count */}
+          <div className="mt-8 text-center">
+            <div className="flex items-center justify-center gap-2 text-cyan-400">
+              <Users className="w-4 h-4" />
+              <span className="font-mono text-sm">
+                {formState.totalPassengers} passengers ready to board
+              </span>
             </div>
           </div>
         </div>
@@ -194,126 +275,109 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-black via-black to-slate-900 flex flex-col items-center justify-center p-4">
-      {/* Hero Section */}
-      <div className="w-full max-w-2xl mb-12 text-center">
+    <div className="min-h-screen bg-gradient-to-b from-black via-black to-slate-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl">
         {/* Departure Board */}
-        <div className="mb-8 inline-block bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-lg p-6 backdrop-blur-xl">
-          <div className="font-mono text-cyan-400 text-sm mb-4 tracking-widest">
-            DEPARTURE BOARD
+        <div className="mb-12 text-center">
+          <div className="inline-block border border-cyan-500/50 rounded-lg p-4 mb-8 bg-cyan-500/5 backdrop-blur">
+            <div className="text-cyan-400 font-mono text-sm mb-2">DEPARTURE BOARD</div>
+            <div className="text-cyan-400 font-bold text-2xl">FLIGHT STATUS: PRE-BOARDING</div>
+            <div className="text-cyan-400/60 font-mono text-xs mt-2">Gate Opening Soon</div>
           </div>
-          <div className="text-cyan-400 font-mono text-xl mb-2 animate-pulse">
-            FLIGHT STATUS: PRE-BOARDING
-          </div>
-          <div className="text-white/60 font-mono text-xs">
-            Gate Opening Soon
-          </div>
-        </div>
 
-        {/* Main Headline */}
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
-          Your Flight is Preparing for <span className="text-cyan-400">Departure</span>
-        </h1>
+          <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">
+            Your Flight is Preparing for
+            <span className="block text-cyan-400 text-shadow-lg">Departure</span>
+          </h1>
 
-        {/* Subheadline */}
-        <p className="text-lg text-white/70 mb-8">
-          Join the pre-boarding list and be first to receive career navigation insights. 
-          <span className="block text-cyan-400/80 mt-2">
-            Get your boarding pass today.
-          </span>
-        </p>
+          <p className="text-lg text-gray-300 mb-4">
+            Join the pre-boarding list and be first to receive career navigation insights.
+          </p>
+          <p className="text-cyan-400 font-semibold">Get your boarding pass today.</p>
 
-        {/* Airplane Icon */}
-        <div className="flex justify-center mb-12">
-          <div className="relative w-16 h-16 animate-bounce">
-            <Plane className="w-full h-full text-cyan-400" />
+          <div className="mt-8 flex justify-center">
+            <Plane className="w-16 h-16 text-cyan-400 animate-bounce" />
           </div>
         </div>
-      </div>
 
-      {/* Signup Form */}
-      <div className="w-full max-w-md">
-        <Card className="bg-gradient-to-br from-cyan-500/5 to-blue-500/5 border border-cyan-500/30 p-8 backdrop-blur-xl">
+        {/* Signup Form */}
+        <Card className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 p-8 backdrop-blur-xl">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email Input */}
             <div>
-              <label className="block text-sm font-semibold text-white mb-2">
-                Email Address *
-              </label>
+              <label className="block text-white font-semibold mb-2">Email Address *</label>
               <Input
                 type="email"
                 placeholder="your@email.com"
                 value={formState.email}
                 onChange={(e) => {
-                  setFormState({ ...formState, email: e.target.value });
+                  setFormState((prev) => ({ ...prev, email: e.target.value }));
                   if (errors.email) setErrors({});
                 }}
-                className="bg-white/5 border-cyan-500/30 text-white placeholder:text-white/40 focus:border-cyan-400 focus:ring-cyan-400/20"
+                className="bg-slate-900/50 border-cyan-500/30 text-white placeholder-gray-500 focus:border-cyan-500 focus:ring-cyan-500/20"
               />
               {errors.email && (
                 <p className="text-red-400 text-sm mt-2">{errors.email}</p>
               )}
             </div>
 
-            {/* First Name Input */}
             <div>
-              <label className="block text-sm font-semibold text-white mb-2">
-                First Name (Optional)
-              </label>
+              <label className="block text-white font-semibold mb-2">First Name (Optional)</label>
               <Input
                 type="text"
                 placeholder="John"
                 value={formState.firstName}
                 onChange={(e) =>
-                  setFormState({ ...formState, firstName: e.target.value })
+                  setFormState((prev) => ({ ...prev, firstName: e.target.value }))
                 }
-                className="bg-white/5 border-cyan-500/30 text-white placeholder:text-white/40 focus:border-cyan-400 focus:ring-cyan-400/20"
+                className="bg-slate-900/50 border-cyan-500/30 text-white placeholder-gray-500 focus:border-cyan-500 focus:ring-cyan-500/20"
               />
             </div>
 
-            {/* Submit Button */}
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-black font-bold py-3 rounded-lg transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/50"
+              disabled={isLoading || createCheckoutMutation.isPending}
+              className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-6 rounded-lg transition-all disabled:opacity-50"
             >
-              Get My Boarding Pass
+              {isLoading || createCheckoutMutation.isPending
+                ? "Processing..."
+                : "Get My Boarding Pass ($0.01)"}
             </Button>
 
-            {/* Privacy Notice */}
-            <p className="text-xs text-white/50 text-center">
-              We respect your privacy. Unsubscribe anytime.{" "}
-              <a href="#" className="text-cyan-400 hover:text-cyan-300">
-                Privacy Policy
-              </a>
-            </p>
+            {/* Fallback Option */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-cyan-500/20"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-gradient-to-b from-black via-black to-slate-900 text-gray-400">
+                  or
+                </span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              onClick={handleSkipPayment}
+              disabled={!formState.email || isLoading || joinWithoutPaymentMutation.isPending}
+              className="w-full bg-slate-700/50 hover:bg-slate-700/70 border border-slate-600 text-gray-300 font-semibold py-6 rounded-lg transition-all disabled:opacity-50"
+            >
+              {joinWithoutPaymentMutation.isPending
+                ? "Joining..."
+                : "Join Waitlist (Skip Payment)"}
+            </Button>
           </form>
-        </Card>
 
-        {/* Queue Counter */}
-        <div className="mt-8 text-center">
-          <div className="inline-block bg-cyan-500/5 border border-cyan-500/20 rounded-full px-6 py-3">
-            <p className="text-white/60 text-sm">
-              <span className="text-cyan-400 font-bold text-lg">
-                {formState.totalPassengers}
+          {/* Footer */}
+          <div className="mt-8 text-center text-xs text-gray-500 space-y-2">
+            <p>We respect your privacy. Unsubscribe anytime. <a href="#" className="text-cyan-400 hover:underline">Privacy Policy</a></p>
+            <div className="flex items-center justify-center gap-2 text-cyan-400">
+              <Users className="w-4 h-4" />
+              <span className="font-mono">
+                {getTotalCountQuery.data || 0} passengers ready to board
               </span>
-              <span className="ml-2">passengers ready to board</span>
-            </p>
+            </div>
           </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="mt-16 text-center text-white/40 text-sm">
-        <p>
-          © 2026 The Ultimate Journey |{" "}
-          <a href="#" className="text-cyan-400/60 hover:text-cyan-400">
-            Terms
-          </a>{" "}
-          |{" "}
-          <a href="#" className="text-cyan-400/60 hover:text-cyan-400">
-            Privacy
-          </a>
-        </p>
+        </Card>
       </div>
     </div>
   );
