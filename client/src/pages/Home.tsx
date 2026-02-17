@@ -65,10 +65,16 @@ export default function Home() {
     }
   }, [getTotalCountQuery.data]);
 
-  // Check for payment success on page load
+  // Check for payment success and referral code on page load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get("session_id");
+    const referralCode = params.get("ref");
+
+    // Store referral code if present
+    if (referralCode) {
+      sessionStorage.setItem("referralCode", referralCode);
+    }
 
     if (sessionId) {
       handlePaymentSuccess(sessionId);
@@ -124,10 +130,14 @@ export default function Home() {
     setErrors({});
 
     try {
+      // Get referral code if present
+      const referralCode = sessionStorage.getItem("referralCode");
+      
       // Create Stripe checkout session
       const result = await createCheckoutMutation.mutateAsync({
         email: formState.email,
         firstName: formState.firstName,
+        referralCode: referralCode || undefined,
       });
 
       // Open Stripe checkout in new tab

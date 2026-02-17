@@ -30,7 +30,8 @@ async function getNextQueuePosition(): Promise<number> {
 export async function createCheckoutSession(
   email: string,
   firstName: string,
-  origin: string
+  origin: string,
+  referralCode?: string
 ): Promise<string> {
   const queuePosition = await getNextQueuePosition();
 
@@ -56,6 +57,7 @@ export async function createCheckoutSession(
       email,
       firstName,
       queuePosition: queuePosition.toString(),
+      referralCode: referralCode || "",
     },
     success_url: `${origin}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/payment-cancel`,
@@ -84,6 +86,7 @@ export async function handlePaymentSuccess(
   const email = session.metadata.email;
   const firstName = session.metadata.firstName || "";
   const queuePosition = parseInt(session.metadata.queuePosition || "1", 10);
+  const referralCodeFromSession = session.metadata.referralCode || undefined;
 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -121,6 +124,25 @@ export async function handlePaymentSuccess(
   const lastInsertId = (newEntry as any).insertId || queuePosition;
   const referralCode = await generateReferralCode(lastInsertId);
 
+  // Process referral if provided
+  let isVip = false;
+  let successfulReferrals = 0;
+  if (referralCodeFromSession) {
+    const { recordReferral } = await import("./referralTracking");
+    try {
+      const referralResult = await recordReferral(
+        referralCodeFromSession,
+        email,
+        lastInsertId
+      );
+      if (referralResult.referrerPromotedToVip) {
+        console.log(`[Referral] Referrer promoted to VIP`);
+      }
+    } catch (error) {
+      console.warn(`[Referral] Failed to process referral`);
+    }
+  }
+
   // Send payment receipt email
   const paymentAmount = session.amount_total || 1; // $0.01 in cents
   const paymentId = session.payment_intent?.toString() || session.id;
@@ -130,8 +152,8 @@ export async function handlePaymentSuccess(
     email,
     queuePosition,
     referralCode: referralCode || "",
-    isVip: false,
-    successfulReferrals: 0,
+    isVip,
+    successfulReferrals,
   };
 }
 
@@ -230,6 +252,7 @@ export const paymentRouter = router({
       z.object({
         email: z.string().email(),
         firstName: z.string().optional(),
+        referralCode: z.string().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -239,7 +262,8 @@ export const paymentRouter = router({
         const checkoutUrl = await createCheckoutSession(
           input.email,
           input.firstName || "",
-          origin
+          origin,
+          input.referralCode
         );
 
         return { checkoutUrl };
