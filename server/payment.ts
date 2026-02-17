@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { waitlistEntries } from "../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 import Stripe from "stripe";
+import { sendPaymentReceiptEmail, sendBoardingPassEmail } from "./email";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
@@ -109,6 +110,11 @@ export async function handlePaymentSuccess(
     boardingPassSent: new Date(),
   });
 
+  // Send payment receipt email
+  const paymentAmount = session.amount_total || 1; // $0.01 in cents
+  const paymentId = session.payment_intent?.toString() || session.id;
+  await sendPaymentReceiptEmail(email, firstName, paymentAmount, paymentId, queuePosition);
+
   return { email, queuePosition };
 }
 
@@ -141,6 +147,9 @@ export async function addToWaitlistWithoutPayment(
     queuePosition,
     paymentStatus: "skipped",
   });
+
+  // Send boarding pass email (without payment)
+  await sendBoardingPassEmail(email, firstName, queuePosition);
 
   return { queuePosition };
 }
