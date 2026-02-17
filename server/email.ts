@@ -9,6 +9,43 @@ if (SENDGRID_API_KEY) {
 }
 
 /**
+ * Generic email sending function
+ */
+export async function sendEmail(
+  options: {
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+  }
+) {
+  if (!SENDGRID_API_KEY) {
+    console.warn("[Email] SendGrid API key not configured, skipping email");
+    return { success: false, error: "SendGrid not configured" };
+  }
+
+  try {
+    const msg = {
+      to: options.to,
+      from: {
+        email: SENDER_EMAIL,
+        name: SENDER_NAME,
+      },
+      subject: options.subject,
+      html: options.html,
+      text: options.text || options.html,
+    };
+
+    await sgMail.send(msg);
+    console.log(`[Email] Email sent to ${options.to}`);
+    return { success: true };
+  } catch (error) {
+    console.error("[Email] Failed to send email:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
  * Send payment receipt email
  */
 export async function sendPaymentReceiptEmail(

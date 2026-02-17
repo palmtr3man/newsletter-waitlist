@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -44,3 +44,59 @@ export const waitlistEntries = mysqlTable("waitlist_entries", {
 
 export type WaitlistEntry = typeof waitlistEntries.$inferSelect;
 export type InsertWaitlistEntry = typeof waitlistEntries.$inferInsert;
+
+/**
+ * Email Sequence Tracking Table
+ * Tracks which emails in the automated sequence have been sent to each subscriber
+ */
+export const emailSequenceTracking = mysqlTable("email_sequence_tracking", {
+  id: int("id").autoincrement().primaryKey(),
+  waitlistEntryId: int("waitlistEntryId").notNull(),
+  sequenceDay: int("sequenceDay").notNull(), // 1, 3, 7, 14
+  emailType: mysqlEnum("emailType", ["welcome", "content_preview", "boarding_reminder", "exclusive_offer"]).notNull(),
+  sentAt: timestamp("sentAt"),
+  openedAt: timestamp("openedAt"),
+  clickedAt: timestamp("clickedAt"),
+  bounced: boolean("bounced").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EmailSequenceTracking = typeof emailSequenceTracking.$inferSelect;
+export type InsertEmailSequenceTracking = typeof emailSequenceTracking.$inferInsert;
+
+/**
+ * Subscriber Preferences Table
+ * Allows subscribers to manage their email preferences
+ */
+export const subscriberPreferences = mysqlTable("subscriber_preferences", {
+  id: int("id").autoincrement().primaryKey(),
+  waitlistEntryId: int("waitlistEntryId").notNull().unique(),
+  emailFrequency: mysqlEnum("emailFrequency", ["daily", "weekly", "biweekly"]).default("weekly").notNull(),
+  receivePromotional: boolean("receivePromotional").default(true),
+  receiveProductUpdates: boolean("receiveProductUpdates").default(true),
+  unsubscribed: boolean("unsubscribed").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SubscriberPreferences = typeof subscriberPreferences.$inferSelect;
+export type InsertSubscriberPreferences = typeof subscriberPreferences.$inferInsert;
+
+/**
+ * Referral Tracking Table
+ * Tracks referrals from existing subscribers
+ */
+export const referralTracking = mysqlTable("referral_tracking", {
+  id: int("id").autoincrement().primaryKey(),
+  referrerId: int("referrerId").notNull(), // waitlistEntryId of the person who referred
+  referredId: int("referredId"), // waitlistEntryId of the person who was referred (null if not yet joined)
+  referredEmail: varchar("referredEmail", { length: 320 }).notNull(),
+  referralCode: varchar("referralCode", { length: 32 }).notNull().unique(),
+  rewardClaimed: boolean("rewardClaimed").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ReferralTracking = typeof referralTracking.$inferSelect;
+export type InsertReferralTracking = typeof referralTracking.$inferInsert;

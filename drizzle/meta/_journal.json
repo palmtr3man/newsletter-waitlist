@@ -15,6 +15,13 @@
       "when": 1770420657856,
       "tag": "0001_nice_madame_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1771359668714,
+      "tag": "0002_youthful_naoko",
+      "breakpoints": true
     }
   ]
 }
