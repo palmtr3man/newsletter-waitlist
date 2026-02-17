@@ -74,7 +74,7 @@ export async function createCheckoutSession(
  */
 export async function handlePaymentSuccess(
   sessionId: string
-): Promise<{ email: string; queuePosition: number }> {
+): Promise<{ email: string; queuePosition: number; referralCode: string; isVip: boolean; successfulReferrals: number }> {
   const session = await stripe.checkout.sessions.retrieve(sessionId);
 
   if (!session.customer_email || !session.metadata?.email) {
@@ -96,11 +96,18 @@ export async function handlePaymentSuccess(
     .limit(1);
 
   if (existing.length > 0) {
-    return { email: existing[0].email, queuePosition: existing[0].queuePosition };
+    return {
+      email: existing[0].email,
+      queuePosition: existing[0].queuePosition,
+      referralCode: existing[0].referralCode || "",
+      isVip: existing[0].isVip || false,
+      successfulReferrals: existing[0].successfulReferrals || 0,
+    };
   }
 
   // Create new waitlist entry
-  await db.insert(waitlistEntries).values({
+  const { generateReferralCode } = await import("./referral");
+  const newEntry = await db.insert(waitlistEntries).values({
     email,
     firstName,
     queuePosition,
@@ -110,12 +117,22 @@ export async function handlePaymentSuccess(
     boardingPassSent: new Date(),
   });
 
+  // Generate referral code for new entry
+  const lastInsertId = (newEntry as any).insertId || queuePosition;
+  const referralCode = await generateReferralCode(lastInsertId);
+
   // Send payment receipt email
   const paymentAmount = session.amount_total || 1; // $0.01 in cents
   const paymentId = session.payment_intent?.toString() || session.id;
   await sendPaymentReceiptEmail(email, firstName, paymentAmount, paymentId, queuePosition);
 
-  return { email, queuePosition };
+  return {
+    email,
+    queuePosition,
+    referralCode: referralCode || "",
+    isVip: false,
+    successfulReferrals: 0,
+  };
 }
 
 /**
@@ -124,7 +141,7 @@ export async function handlePaymentSuccess(
 export async function addToWaitlistWithoutPayment(
   email: string,
   firstName: string
-): Promise<{ queuePosition: number }> {
+): Promise<{ queuePosition: number; referralCode: string; isVip: boolean; successfulReferrals: number }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -136,22 +153,37 @@ export async function addToWaitlistWithoutPayment(
     .limit(1);
 
   if (existing.length > 0) {
-    return { queuePosition: existing[0].queuePosition };
+    return {
+      queuePosition: existing[0].queuePosition,
+      referralCode: existing[0].referralCode || "",
+      isVip: existing[0].isVip || false,
+      successfulReferrals: existing[0].successfulReferrals || 0,
+    };
   }
 
   const queuePosition = await getNextQueuePosition();
 
-  await db.insert(waitlistEntries).values({
+  const { generateReferralCode } = await import("./referral");
+  const newEntry = await db.insert(waitlistEntries).values({
     email,
     firstName,
     queuePosition,
     paymentStatus: "skipped",
   });
 
+  // Generate referral code for new entry
+  const lastInsertId = (newEntry as any).insertId || queuePosition;
+  const referralCode = await generateReferralCode(lastInsertId);
+
   // Send boarding pass email (without payment)
   await sendBoardingPassEmail(email, firstName, queuePosition);
 
-  return { queuePosition };
+  return {
+    queuePosition,
+    referralCode: referralCode || "",
+    isVip: false,
+    successfulReferrals: 0,
+  };
 }
 
 /**
@@ -221,11 +253,21 @@ export const paymentRouter = router({
    * Confirm payment and create waitlist entry
    */
   confirmPayment: publicProcedure
-    .input(z.object({ sessionId: z.string() }))
+    .input(
+      z.object({
+        sessionId: z.string(),
+      })
+    )
     .mutation(async ({ input }) => {
       try {
         const result = await handlePaymentSuccess(input.sessionId);
-        return result;
+        return {
+          email: result.email,
+          queuePosition: result.queuePosition,
+          referralCode: result.referralCode,
+          isVip: result.isVip,
+          successfulReferrals: result.successfulReferrals,
+        };
       } catch (error) {
         console.error("[Payment] Payment confirmation failed:", error);
         throw new Error("Failed to confirm payment");
@@ -244,11 +286,13 @@ export const paymentRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
-        const result = await addToWaitlistWithoutPayment(
-          input.email,
-          input.firstName || ""
-        );
-        return result;
+        const result = await addToWaitlistWithoutPayment(input.email, input.firstName || "");
+        return {
+          queuePosition: result.queuePosition,
+          referralCode: result.referralCode,
+          isVip: result.isVip,
+          successfulReferrals: result.successfulReferrals,
+        };
       } catch (error) {
         console.error("[Payment] Waitlist join failed:", error);
         throw new Error("Failed to join waitlist");

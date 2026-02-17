@@ -38,6 +38,9 @@ export const waitlistEntries = mysqlTable("waitlist_entries", {
   stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 255 }),
   stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
   boardingPassSent: timestamp("boardingPassSent"),
+  referralCode: varchar("referralCode", { length: 32 }).unique(),
+  isVip: boolean("isVip").default(false),
+  successfulReferrals: int("successfulReferrals").default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -94,6 +97,7 @@ export const referralTracking = mysqlTable("referral_tracking", {
   referredEmail: varchar("referredEmail", { length: 320 }).notNull(),
   referralCode: varchar("referralCode", { length: 32 }).notNull().unique(),
   rewardClaimed: boolean("rewardClaimed").default(false),
+  joinedAt: timestamp("joinedAt"), // When the referred person joined
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

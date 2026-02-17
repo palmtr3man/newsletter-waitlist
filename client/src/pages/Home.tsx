@@ -1,10 +1,11 @@
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { Plane, Users, Share2, AlertCircle, CheckCircle } from "lucide-react";
+import { Plane, Users, Share2, AlertCircle, CheckCircle, Settings } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { EmailPreferences } from "@/components/EmailPreferences";
+import { ReferralInvite } from "@/components/ReferralInvite";
 
 /**
  * Newsletter Waitlist Landing Page with Stripe Payment
@@ -15,6 +16,8 @@ import { toast } from "sonner";
  * - Aviation-themed boarding pass confirmation
  * - Real-time queue position tracking
  * - Stripe $0.01 payment integration
+ * - Email preferences management
+ * - Referral system with VIP status
  */
 
 interface FormState {
@@ -24,6 +27,9 @@ interface FormState {
   queuePosition: number;
   totalPassengers: number;
   paymentStatus: "pending" | "completed" | "failed" | "skipped";
+  referralCode?: string;
+  isVip?: boolean;
+  successfulReferrals?: number;
 }
 
 export default function Home() {
@@ -34,10 +40,14 @@ export default function Home() {
     queuePosition: 0,
     totalPassengers: 0,
     paymentStatus: "pending",
+    referralCode: "",
+    isVip: false,
+    successfulReferrals: 0,
   });
 
   const [errors, setErrors] = useState<{ email?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [showEmailPreferences, setShowEmailPreferences] = useState(false);
 
   // tRPC mutations
   const createCheckoutMutation = trpc.payment.createCheckout.useMutation();
@@ -79,6 +89,9 @@ export default function Home() {
         queuePosition: result.queuePosition,
         paymentStatus: "completed",
         email: result.email,
+        referralCode: result.referralCode,
+        isVip: result.isVip,
+        successfulReferrals: result.successfulReferrals,
       }));
       toast.success("Payment successful! Welcome aboard!");
       // Clear URL params
@@ -143,6 +156,9 @@ export default function Home() {
         submitted: true,
         queuePosition: result.queuePosition,
         paymentStatus: "skipped",
+        referralCode: result.referralCode,
+        isVip: result.isVip,
+        successfulReferrals: result.successfulReferrals,
       }));
       toast.info("Added to waitlist! (Payment skipped)");
     } catch (error) {
@@ -173,8 +189,17 @@ export default function Home() {
       queuePosition: 0,
       totalPassengers: getTotalCountQuery.data || 0,
       paymentStatus: "pending",
+      referralCode: "",
+      isVip: false,
+      successfulReferrals: 0,
     });
     setErrors({});
+  };
+
+  const handleSaveEmailPreferences = (preferences: any) => {
+    // In a real app, this would call an API to save preferences
+    toast.success("Email preferences updated!");
+    setShowEmailPreferences(false);
   };
 
   if (formState.submitted) {
@@ -242,34 +267,53 @@ export default function Home() {
             </Card>
           </div>
 
+          {/* Referral Invite Section */}
+          {formState.referralCode && (
+            <ReferralInvite
+              referralCode={formState.referralCode}
+              isVip={formState.isVip || false}
+              successfulReferrals={formState.successfulReferrals || 0}
+              passengerName={formState.firstName || "Passenger"}
+            />
+          )}
+
           {/* Action Buttons */}
           <div className="space-y-4">
-            <Button
-              onClick={handleShare}
-              className="w-full bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-400 font-semibold py-6 rounded-lg transition-all"
-            >
-              <Share2 className="w-4 h-4 mr-2" />
-              Invite Others
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                onClick={handleShare}
+                className="flex-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-400 font-semibold py-6 rounded-lg transition-all"
+              >
+                <Share2 className="w-5 h-5 mr-2" />
+                Invite Others
+              </Button>
+              <Button
+                onClick={() => setShowEmailPreferences(true)}
+                className="flex-1 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-400 font-semibold py-6 rounded-lg transition-all"
+              >
+                <Settings className="w-5 h-5 mr-2" />
+                Email Preferences
+              </Button>
+            </div>
 
             <Button
               onClick={handleReset}
-              className="w-full bg-slate-700/50 hover:bg-slate-700/70 border border-slate-600 text-white font-semibold py-6 rounded-lg transition-all"
+              variant="outline"
+              className="w-full"
             >
-              Add Another Email
+              Start Over
             </Button>
           </div>
-
-          {/* Passenger Count */}
-          <div className="mt-8 text-center">
-            <div className="flex items-center justify-center gap-2 text-cyan-400">
-              <Users className="w-4 h-4" />
-              <span className="font-mono text-sm">
-                {formState.totalPassengers} passengers ready to board
-              </span>
-            </div>
-          </div>
         </div>
+
+        {/* Email Preferences Modal */}
+        {showEmailPreferences && (
+          <EmailPreferences
+            email={formState.email}
+            onClose={() => setShowEmailPreferences(false)}
+            onSave={handleSaveEmailPreferences}
+          />
+        )}
       </div>
     );
   }
@@ -278,106 +322,98 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-b from-black via-black to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         {/* Departure Board */}
-        <div className="mb-12 text-center">
-          <div className="inline-block border border-cyan-500/50 rounded-lg p-4 mb-8 bg-cyan-500/5 backdrop-blur">
+        <div className="mb-12 text-center animate-in fade-in duration-700">
+          <div className="inline-block mb-8 p-4 border-2 border-cyan-400/50 rounded-lg bg-cyan-500/10 backdrop-blur">
             <div className="text-cyan-400 font-mono text-sm mb-2">DEPARTURE BOARD</div>
-            <div className="text-cyan-400 font-bold text-2xl">FLIGHT STATUS: PRE-BOARDING</div>
-            <div className="text-cyan-400/60 font-mono text-xs mt-2">Gate Opening Soon</div>
-          </div>
-
-          <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">
-            Your Flight is Preparing for
-            <span className="block text-cyan-400 text-shadow-lg">Departure</span>
-          </h1>
-
-          <p className="text-lg text-gray-300 mb-4">
-            Join the pre-boarding list and be first to receive career navigation insights.
-          </p>
-          <p className="text-cyan-400 font-semibold">Get your boarding pass today.</p>
-
-          <div className="mt-8 flex justify-center">
-            <Plane className="w-16 h-16 text-cyan-400 animate-bounce" />
+            <h1 className="text-4xl md:text-5xl font-bold text-white">
+              FLIGHT STATUS: PRE-BOARDING
+            </h1>
+            <p className="text-cyan-400/80 font-mono text-sm mt-2">Gate Opening Soon</p>
           </div>
         </div>
 
+        {/* Hero Section */}
+        <div className="text-center mb-12">
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+            Your Flight is Preparing for
+            <span className="block text-cyan-400">Departure</span>
+          </h2>
+          <p className="text-foreground/80 text-lg mb-6">
+            Join the pre-boarding list and be first to receive career navigation insights.
+          </p>
+          <p className="text-cyan-400 font-semibold text-lg">
+            ✈️ Get your boarding pass today.
+          </p>
+        </div>
+
         {/* Signup Form */}
-        <Card className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 p-8 backdrop-blur-xl">
+        <Card className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 p-8 backdrop-blur-xl mb-8">
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Email Input */}
             <div>
-              <label className="block text-white font-semibold mb-2">Email Address *</label>
-              <Input
+              <label className="block text-foreground font-semibold mb-2">
+                Email Address <span className="text-red-400">*</span>
+              </label>
+              <input
                 type="email"
                 placeholder="your@email.com"
                 value={formState.email}
-                onChange={(e) => {
-                  setFormState((prev) => ({ ...prev, email: e.target.value }));
-                  if (errors.email) setErrors({});
-                }}
-                className="bg-slate-900/50 border-cyan-500/30 text-white placeholder-gray-500 focus:border-cyan-500 focus:ring-cyan-500/20"
+                onChange={(e) => setFormState((prev) => ({ ...prev, email: e.target.value }))}
+                className="w-full px-4 py-3 bg-black/40 border border-cyan-500/30 rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:border-cyan-400 transition"
               />
               {errors.email && (
                 <p className="text-red-400 text-sm mt-2">{errors.email}</p>
               )}
             </div>
 
+            {/* First Name Input */}
             <div>
-              <label className="block text-white font-semibold mb-2">First Name (Optional)</label>
-              <Input
+              <label className="block text-foreground font-semibold mb-2">
+                First Name <span className="text-foreground/40">(Optional)</span>
+              </label>
+              <input
                 type="text"
                 placeholder="John"
                 value={formState.firstName}
-                onChange={(e) =>
-                  setFormState((prev) => ({ ...prev, firstName: e.target.value }))
-                }
-                className="bg-slate-900/50 border-cyan-500/30 text-white placeholder-gray-500 focus:border-cyan-500 focus:ring-cyan-500/20"
+                onChange={(e) => setFormState((prev) => ({ ...prev, firstName: e.target.value }))}
+                className="w-full px-4 py-3 bg-black/40 border border-cyan-500/30 rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:border-cyan-400 transition"
               />
             </div>
 
-            <Button
-              type="submit"
-              disabled={isLoading || createCheckoutMutation.isPending}
-              className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-6 rounded-lg transition-all disabled:opacity-50"
-            >
-              {isLoading || createCheckoutMutation.isPending
-                ? "Processing..."
-                : "Get My Boarding Pass ($0.01)"}
-            </Button>
-
-            {/* Fallback Option */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-cyan-500/20"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gradient-to-b from-black via-black to-slate-900 text-gray-400">
-                  or
-                </span>
-              </div>
+            {/* Passenger Counter */}
+            <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+              <p className="text-foreground/60 text-sm mb-1">Total Passengers Ready to Board</p>
+              <p className="text-3xl font-bold text-cyan-400">{formState.totalPassengers}</p>
             </div>
 
-            <Button
-              type="button"
-              onClick={handleSkipPayment}
-              disabled={!formState.email || isLoading || joinWithoutPaymentMutation.isPending}
-              className="w-full bg-slate-700/50 hover:bg-slate-700/70 border border-slate-600 text-gray-300 font-semibold py-6 rounded-lg transition-all disabled:opacity-50"
-            >
-              {joinWithoutPaymentMutation.isPending
-                ? "Joining..."
-                : "Join Waitlist (Skip Payment)"}
-            </Button>
+            {/* Submit Buttons */}
+            <div className="space-y-3">
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-3 rounded-lg transition-all disabled:opacity-50"
+              >
+                {isLoading ? "Processing..." : "Get My Boarding Pass ($0.01)"}
+              </Button>
+
+              <Button
+                type="button"
+                onClick={handleSkipPayment}
+                disabled={isLoading}
+                variant="outline"
+                className="w-full py-3"
+              >
+                {isLoading ? "Processing..." : "Join Waitlist (Skip Payment)"}
+              </Button>
+            </div>
           </form>
-
-          {/* Footer */}
-          <div className="mt-8 text-center text-xs text-gray-500 space-y-2">
-            <p>We respect your privacy. Unsubscribe anytime. <a href="#" className="text-cyan-400 hover:underline">Privacy Policy</a></p>
-            <div className="flex items-center justify-center gap-2 text-cyan-400">
-              <Users className="w-4 h-4" />
-              <span className="font-mono">
-                {getTotalCountQuery.data || 0} passengers ready to board
-              </span>
-            </div>
-          </div>
         </Card>
+
+        {/* Footer Info */}
+        <div className="text-center text-foreground/60 text-sm">
+          <p>💳 Secure payment powered by Stripe</p>
+          <p className="mt-2">🔒 Your data is safe and encrypted</p>
+        </div>
       </div>
     </div>
   );
