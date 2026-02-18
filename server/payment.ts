@@ -4,7 +4,7 @@ import { getDb } from "./db";
 import { waitlistEntries } from "../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 import Stripe from "stripe";
-import { sendPaymentReceiptEmail, sendBoardingPassEmail } from "./email";
+import { sendPaymentReceiptEmail, sendBoardingPassEmail, sendInternalNotification } from "./email";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
@@ -91,7 +91,7 @@ export async function handlePaymentSuccess(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Check if already exists
+  // Check if already exists (idempotency guard)
   const existing = await db
     .select()
     .from(waitlistEntries)
@@ -143,10 +143,13 @@ export async function handlePaymentSuccess(
     }
   }
 
-  // Send payment receipt email
-  const paymentAmount = session.amount_total || 1; // $0.01 in cents
+  // Send paid boarding pass email
+  const paymentAmount = session.amount_total || 1;
   const paymentId = session.payment_intent?.toString() || session.id;
   await sendPaymentReceiptEmail(email, firstName, paymentAmount, paymentId, queuePosition);
+
+  // Send internal notification
+  await sendInternalNotification(email, firstName, "paid", paymentAmount);
 
   return {
     email,
@@ -167,7 +170,7 @@ export async function addToWaitlistWithoutPayment(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Check if already exists
+  // Check if already exists (idempotency guard)
   const existing = await db
     .select()
     .from(waitlistEntries)
@@ -184,7 +187,6 @@ export async function addToWaitlistWithoutPayment(
   }
 
   const queuePosition = await getNextQueuePosition();
-
   const { generateReferralCode } = await import("./referral");
   const newEntry = await db.insert(waitlistEntries).values({
     email,
@@ -197,8 +199,11 @@ export async function addToWaitlistWithoutPayment(
   const lastInsertId = (newEntry as any).insertId || queuePosition;
   const referralCode = await generateReferralCode(lastInsertId);
 
-  // Send boarding pass email (without payment)
+  // Send free boarding pass email
   await sendBoardingPassEmail(email, firstName, queuePosition);
+
+  // Send internal notification
+  await sendInternalNotification(email, firstName, "free");
 
   return {
     queuePosition,
@@ -244,9 +249,6 @@ export async function getTotalWaitlistCount(): Promise<number> {
  * Payment router with tRPC procedures
  */
 export const paymentRouter = router({
-  /**
-   * Create a checkout session for payment
-   */
   createCheckout: publicProcedure
     .input(
       z.object({
@@ -257,7 +259,6 @@ export const paymentRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const origin = ctx.req.headers.origin || "https://newsletter.thispagedoesnotexist12345.us";
-
       try {
         const checkoutUrl = await createCheckoutSession(
           input.email,
@@ -265,7 +266,6 @@ export const paymentRouter = router({
           origin,
           input.referralCode
         );
-
         return { checkoutUrl };
       } catch (error) {
         console.error("[Payment] Checkout creation failed:", error);
@@ -273,15 +273,8 @@ export const paymentRouter = router({
       }
     }),
 
-  /**
-   * Confirm payment and create waitlist entry
-   */
   confirmPayment: publicProcedure
-    .input(
-      z.object({
-        sessionId: z.string(),
-      })
-    )
+    .input(z.object({ sessionId: z.string() }))
     .mutation(async ({ input }) => {
       try {
         const result = await handlePaymentSuccess(input.sessionId);
@@ -298,9 +291,6 @@ export const paymentRouter = router({
       }
     }),
 
-  /**
-   * Add to waitlist without payment (fallback)
-   */
   joinWaitlistWithoutPayment: publicProcedure
     .input(
       z.object({
@@ -323,9 +313,6 @@ export const paymentRouter = router({
       }
     }),
 
-  /**
-   * Get waitlist entry by email
-   */
   getEntry: publicProcedure
     .input(z.object({ email: z.string().email() }))
     .query(async ({ input }) => {
@@ -338,9 +325,6 @@ export const paymentRouter = router({
       }
     }),
 
-  /**
-   * Get total waitlist count
-   */
   getTotalCount: publicProcedure.query(async () => {
     try {
       return await getTotalWaitlistCount();
