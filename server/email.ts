@@ -1,3 +1,48 @@
+
+
+/**
+ * Send internal signup notification to admin addresses
+ */
+export async function sendInternalNotification(
+  userEmail: string,
+  firstName: string,
+  tier: "paid" | "free",
+  amountPaid?: number
+): Promise<{ success: boolean; error?: string }> {
+  if (!SENDGRID_API_KEY) {
+    console.warn("[Email] SendGrid API key not configured, skipping internal notification");
+    return { success: false, error: "SendGrid not configured" };
+  }
+
+  const signupDate = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
+  const tierLabel = tier === "paid" ? `Paid ($${((amountPaid || 1) / 100).toFixed(2)})` : "Free";
+
+  const subject = `[New Signup] ${firstName || userEmail} — ${tierLabel} — ${signupDate}`;
+  const html = `
+    <h2>New Signup on The Ultimate Journey</h2>
+    <table style="border-collapse:collapse; font-family: monospace;">
+      <tr><td style="padding:4px 12px 4px 0; color:#999;">Email</td><td style="padding:4px 0;"><strong>${userEmail}</strong></td></tr>
+      <tr><td style="padding:4px 12px 4px 0; color:#999;">Name</td><td style="padding:4px 0;">${firstName || "—"}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0; color:#999;">Tier</td><td style="padding:4px 0;">${tierLabel}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0; color:#999;">Date</td><td style="padding:4px 0;">${signupDate}</td></tr>
+    </table>
+  `;
+
+  try {
+    await sgMail.send({
+      to: ["k.clark7@gmail.com", "support@thispagedoesnotexist12345.com"],
+      from: { email: SENDER_EMAIL, name: SENDER_NAME },
+      subject,
+      html,
+      text: `New Signup: ${userEmail} | ${tierLabel} | ${signupDate}`,
+    });
+    console.log(`[Email] Internal notification sent for ${userEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error("[Email] Failed to send internal notification:", error);
+    return { success: false, error: String(error) };
+  }
+}
 import sgMail from "@sendgrid/mail";
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
