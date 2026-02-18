@@ -10,15 +10,21 @@ import { ReferralInvite } from "@/components/ReferralInvite";
 /**
  * Newsletter Waitlist Landing Page with Stripe Payment
  *
- * Design: Retro-Futuristic Airport Terminal
- * - Departure board aesthetic with flip-text animations
- * - Glassmorphic form cards with cyan neon accents
+ * Design: February Black Glass Theme (Limited Edition, expires Mar 1 2026)
+ * - Dark glass morphism with cyan neon accents
  * - Aviation-themed boarding pass confirmation
  * - Real-time queue position tracking
  * - Stripe $0.01 payment integration
- * - Email preferences management
- * - Referral system with VIP status
  */
+
+// Auto-expire theme: revert to default after March 1 2026
+function initTheme() {
+  if (new Date() > new Date("2026-03-01")) {
+    document.documentElement.removeAttribute("data-theme");
+    return;
+  }
+  document.documentElement.setAttribute("data-theme", "february-glass-2026");
+}
 
 interface FormState {
   email: string;
@@ -49,6 +55,11 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [showEmailPreferences, setShowEmailPreferences] = useState(false);
 
+  // Apply Black Glass theme on mount
+  useEffect(() => {
+    initTheme();
+  }, []);
+
   // tRPC mutations
   const createCheckoutMutation = trpc.payment.createCheckout.useMutation();
   const confirmPaymentMutation = trpc.payment.confirmPayment.useMutation();
@@ -71,7 +82,6 @@ export default function Home() {
     const sessionId = params.get("session_id");
     const referralCode = params.get("ref");
 
-    // Store referral code if present
     if (referralCode) {
       sessionStorage.setItem("referralCode", referralCode);
     }
@@ -100,7 +110,6 @@ export default function Home() {
         successfulReferrals: result.successfulReferrals,
       }));
       toast.success("Payment successful! Welcome aboard!");
-      // Clear URL params
       window.history.replaceState({}, document.title, window.location.pathname);
     } catch (error) {
       toast.error("Failed to confirm payment. Please try again.");
@@ -130,17 +139,13 @@ export default function Home() {
     setErrors({});
 
     try {
-      // Get referral code if present
       const referralCode = sessionStorage.getItem("referralCode");
-      
-      // Create Stripe checkout session
       const result = await createCheckoutMutation.mutateAsync({
         email: formState.email,
         firstName: formState.firstName,
         referralCode: referralCode || undefined,
       });
 
-      // Open Stripe checkout in new tab
       if (result.checkoutUrl) {
         window.open(result.checkoutUrl, "_blank");
         toast.info("Opening payment page in a new window...");
@@ -181,10 +186,7 @@ export default function Home() {
   const handleShare = () => {
     const text = `I just joined The Ultimate Journey newsletter waitlist! I'm passenger #${formState.queuePosition}. Join me at https://newsletter.thispagedoesnotexist12345.us/`;
     if (navigator.share) {
-      navigator.share({
-        title: "The Ultimate Journey",
-        text: text,
-      });
+      navigator.share({ title: "The Ultimate Journey", text });
     } else {
       navigator.clipboard.writeText(text);
       toast.success("Link copied to clipboard!");
@@ -207,116 +209,128 @@ export default function Home() {
   };
 
   const handleSaveEmailPreferences = (preferences: any) => {
-    // In a real app, this would call an API to save preferences
     toast.success("Email preferences updated!");
     setShowEmailPreferences(false);
   };
 
   if (formState.submitted) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-black via-black to-slate-900 flex items-center justify-center p-4">
-        <div className="w-full max-w-2xl">
-          {/* Boarding Pass */}
-          <div className="mb-8 animate-in slide-in-from-left duration-600">
-            <Card className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 p-8 backdrop-blur-xl">
-              <div className="space-y-6">
-                {/* Payment Status Badge */}
-                <div className="flex items-center gap-2 mb-4">
-                  {formState.paymentStatus === "completed" && (
-                    <>
-                      <CheckCircle className="w-5 h-5 text-green-400" />
-                      <span className="text-green-400 font-mono text-sm">PAYMENT VERIFIED</span>
-                    </>
-                  )}
-                  {formState.paymentStatus === "skipped" && (
-                    <>
-                      <AlertCircle className="w-5 h-5 text-yellow-400" />
-                      <span className="text-yellow-400 font-mono text-sm">WAITLIST ONLY</span>
-                    </>
-                  )}
+      <div className="min-h-screen bg-gradient-to-b from-black via-black to-slate-900 flex flex-col">
+        {/* Header nav */}
+        <header className="w-full flex items-center justify-between px-6 py-4 border-b border-cyan-500/20">
+          <a
+            href="https://thispagedoesnotexist12345.com/"
+            className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition font-mono text-sm"
+            style={{ textShadow: "0 0 8px rgba(0,217,255,0.6)" }}
+          >
+            <Plane className="w-4 h-4" />
+            thispagedoesnotexist12345.com
+          </a>
+        </header>
+
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl">
+            {/* Boarding Pass */}
+            <div className="mb-8 animate-in slide-in-from-left duration-600">
+              <Card className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 p-8 backdrop-blur-xl">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    {formState.paymentStatus === "completed" && (
+                      <>
+                        <CheckCircle className="w-5 h-5 text-green-400" />
+                        <span className="text-green-400 font-mono text-sm">PAYMENT VERIFIED</span>
+                      </>
+                    )}
+                    {formState.paymentStatus === "skipped" && (
+                      <>
+                        <AlertCircle className="w-5 h-5 text-yellow-400" />
+                        <span className="text-yellow-400 font-mono text-sm">WAITLIST ONLY</span>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="border-b border-cyan-500/20 pb-4">
+                    <div className="text-cyan-400 font-mono text-sm mb-2">BOARDING PASS</div>
+                    <h2 className="text-3xl font-bold text-white">
+                      {formState.firstName || "Passenger"}
+                    </h2>
+                    <p className="text-cyan-400/80 font-mono text-sm mt-1">{formState.email}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-cyan-400/60 text-xs font-mono mb-1">FLIGHT</p>
+                      <p className="text-white font-bold">ULTIMATE-JOURNEY-2026</p>
+                    </div>
+                    <div>
+                      <p className="text-cyan-400/60 text-xs font-mono mb-1">DEPARTURE</p>
+                      <p className="text-white font-bold">March 2026</p>
+                    </div>
+                    <div>
+                      <p className="text-cyan-400/60 text-xs font-mono mb-1">SEAT</p>
+                      <p className="text-white font-bold">#{formState.queuePosition}</p>
+                    </div>
+                    <div>
+                      <p className="text-cyan-400/60 text-xs font-mono mb-1">GATE</p>
+                      <p className="text-white font-bold">BOARDING</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-cyan-500/10 p-4 rounded border border-cyan-500/20">
+                    <div className="font-mono text-xs text-cyan-400/60 text-center">
+                      ▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌
+                    </div>
+                  </div>
                 </div>
-
-                {/* Boarding Pass Header */}
-                <div className="border-b border-cyan-500/20 pb-4">
-                  <div className="text-cyan-400 font-mono text-sm mb-2">BOARDING PASS</div>
-                  <h2 className="text-3xl font-bold text-white">
-                    {formState.firstName || "Passenger"}
-                  </h2>
-                  <p className="text-cyan-400/80 font-mono text-sm mt-1">
-                    {formState.email}
-                  </p>
-                </div>
-
-                {/* Flight Details */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-cyan-400/60 text-xs font-mono mb-1">FLIGHT</p>
-                    <p className="text-white font-bold">ULTIMATE-JOURNEY-2026</p>
-                  </div>
-                  <div>
-                    <p className="text-cyan-400/60 text-xs font-mono mb-1">DEPARTURE</p>
-                    <p className="text-white font-bold">March 2026</p>
-                  </div>
-                  <div>
-                    <p className="text-cyan-400/60 text-xs font-mono mb-1">SEAT</p>
-                    <p className="text-white font-bold">#{formState.queuePosition}</p>
-                  </div>
-                  <div>
-                    <p className="text-cyan-400/60 text-xs font-mono mb-1">GATE</p>
-                    <p className="text-white font-bold">BOARDING</p>
-                  </div>
-                </div>
-
-                {/* Barcode */}
-                <div className="bg-cyan-500/10 p-4 rounded border border-cyan-500/20">
-                  <div className="font-mono text-xs text-cyan-400/60 text-center">
-                    ▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Referral Invite Section */}
-          {formState.referralCode && (
-            <ReferralInvite
-              referralCode={formState.referralCode}
-              isVip={formState.isVip || false}
-              successfulReferrals={formState.successfulReferrals || 0}
-              passengerName={formState.firstName || "Passenger"}
-            />
-          )}
-
-          {/* Action Buttons */}
-          <div className="space-y-4">
-            <div className="flex gap-3">
-              <Button
-                onClick={handleShare}
-                className="flex-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-400 font-semibold py-6 rounded-lg transition-all"
-              >
-                <Share2 className="w-5 h-5 mr-2" />
-                Invite Others
-              </Button>
-              <Button
-                onClick={() => setShowEmailPreferences(true)}
-                className="flex-1 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-400 font-semibold py-6 rounded-lg transition-all"
-              >
-                <Settings className="w-5 h-5 mr-2" />
-                Email Preferences
-              </Button>
+              </Card>
             </div>
 
-            <Button
-              onClick={handleReset}
-              variant="outline"
-              className="w-full"
-            >
-              Start Over
-            </Button>
+            {formState.referralCode && (
+              <ReferralInvite
+                referralCode={formState.referralCode}
+                isVip={formState.isVip || false}
+                successfulReferrals={formState.successfulReferrals || 0}
+                passengerName={formState.firstName || "Passenger"}
+              />
+            )}
+
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleShare}
+                  className="flex-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-400 font-semibold py-6 rounded-lg transition-all"
+                >
+                  <Share2 className="w-5 h-5 mr-2" />
+                  Invite Others
+                </Button>
+                <Button
+                  onClick={() => setShowEmailPreferences(true)}
+                  className="flex-1 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-400 font-semibold py-6 rounded-lg transition-all"
+                >
+                  <Settings className="w-5 h-5 mr-2" />
+                  Email Preferences
+                </Button>
+              </div>
+              <Button onClick={handleReset} variant="outline" className="w-full">
+                Start Over
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* Email Preferences Modal */}
+        {/* Footer */}
+        <footer className="w-full px-6 py-4 border-t border-cyan-500/20 text-center space-y-1">
+          <a
+            href="https://thispagedoesnotexist12345.com/"
+            className="block text-cyan-400/70 hover:text-cyan-400 text-sm transition font-mono"
+          >
+            ← Back to Main Site (.com)
+          </a>
+          <p className="text-foreground/40 text-xs font-mono">
+            February Black Glass Theme – Limited Edition (Expires Mar 1)
+          </p>
+        </footer>
+
         {showEmailPreferences && (
           <EmailPreferences
             email={formState.email}
@@ -329,102 +343,119 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-black via-black to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        {/* Departure Board */}
-        <div className="mb-12 text-center animate-in fade-in duration-700">
-          <div className="inline-block mb-8 p-4 border-2 border-cyan-400/50 rounded-lg bg-cyan-500/10 backdrop-blur">
-            <div className="text-cyan-400 font-mono text-sm mb-2">DEPARTURE BOARD</div>
-            <h1 className="text-4xl md:text-5xl font-bold text-white">
-              FLIGHT STATUS: PRE-BOARDING
-            </h1>
-            <p className="text-cyan-400/80 font-mono text-sm mt-2">Gate Opening Soon</p>
+    <div className="min-h-screen bg-gradient-to-b from-black via-black to-slate-900 flex flex-col">
+      {/* Header nav */}
+      <header className="w-full flex items-center justify-between px-6 py-4 border-b border-cyan-500/20">
+        <a
+          href="https://thispagedoesnotexist12345.com/"
+          className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition font-mono text-sm"
+          style={{ textShadow: "0 0 8px rgba(0,217,255,0.6)" }}
+        >
+          <Plane className="w-4 h-4" />
+          thispagedoesnotexist12345.com
+        </a>
+      </header>
+
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-2xl">
+          {/* Departure Board */}
+          <div className="mb-12 text-center animate-in fade-in duration-700">
+            <div className="inline-block mb-8 p-4 border-2 border-cyan-400/50 rounded-lg bg-cyan-500/10 backdrop-blur">
+              <div className="text-cyan-400 font-mono text-sm mb-2">DEPARTURE BOARD</div>
+              <h1 className="text-4xl md:text-5xl font-bold text-white">
+                FLIGHT STATUS: PRE-BOARDING
+              </h1>
+              <p className="text-cyan-400/80 font-mono text-sm mt-2">Gate Opening Soon</p>
+            </div>
+          </div>
+
+          {/* Hero Section */}
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Your Flight is Preparing for
+              <span className="block text-cyan-400">Departure</span>
+            </h2>
+            <p className="text-foreground/80 text-lg mb-6">
+              Join the pre-boarding list and be first to receive career navigation insights.
+            </p>
+            <p className="text-cyan-400 font-semibold text-lg">✈️ Get your boarding pass today.</p>
+          </div>
+
+          {/* Signup Form */}
+          <Card className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 p-8 backdrop-blur-xl mb-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-foreground font-semibold mb-2">
+                  Email Address <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={formState.email}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, email: e.target.value }))}
+                  className="w-full px-4 py-3 bg-black/40 border border-cyan-500/30 rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:border-cyan-400 transition"
+                />
+                {errors.email && <p className="text-red-400 text-sm mt-2">{errors.email}</p>}
+              </div>
+
+              <div>
+                <label className="block text-foreground font-semibold mb-2">
+                  First Name <span className="text-foreground/40">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="John"
+                  value={formState.firstName}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, firstName: e.target.value }))}
+                  className="w-full px-4 py-3 bg-black/40 border border-cyan-500/30 rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:border-cyan-400 transition"
+                />
+              </div>
+
+              <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+                <p className="text-foreground/60 text-sm mb-1">Total Passengers Ready to Board</p>
+                <p className="text-3xl font-bold text-cyan-400">{formState.totalPassengers}</p>
+              </div>
+
+              <div className="space-y-3">
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-3 rounded-lg transition-all disabled:opacity-50"
+                >
+                  {isLoading ? "Processing..." : "Get My Boarding Pass ($0.01)"}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSkipPayment}
+                  disabled={isLoading}
+                  variant="outline"
+                  className="w-full py-3"
+                >
+                  {isLoading ? "Processing..." : "Join Waitlist (Skip Payment)"}
+                </Button>
+              </div>
+            </form>
+          </Card>
+
+          <div className="text-center text-foreground/60 text-sm">
+            <p>💳 Secure payment powered by Stripe</p>
+            <p className="mt-2">🔒 Your data is safe and encrypted</p>
           </div>
         </div>
-
-        {/* Hero Section */}
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Your Flight is Preparing for
-            <span className="block text-cyan-400">Departure</span>
-          </h2>
-          <p className="text-foreground/80 text-lg mb-6">
-            Join the pre-boarding list and be first to receive career navigation insights.
-          </p>
-          <p className="text-cyan-400 font-semibold text-lg">
-            ✈️ Get your boarding pass today.
-          </p>
-        </div>
-
-        {/* Signup Form */}
-        <Card className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 p-8 backdrop-blur-xl mb-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email Input */}
-            <div>
-              <label className="block text-foreground font-semibold mb-2">
-                Email Address <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={formState.email}
-                onChange={(e) => setFormState((prev) => ({ ...prev, email: e.target.value }))}
-                className="w-full px-4 py-3 bg-black/40 border border-cyan-500/30 rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:border-cyan-400 transition"
-              />
-              {errors.email && (
-                <p className="text-red-400 text-sm mt-2">{errors.email}</p>
-              )}
-            </div>
-
-            {/* First Name Input */}
-            <div>
-              <label className="block text-foreground font-semibold mb-2">
-                First Name <span className="text-foreground/40">(Optional)</span>
-              </label>
-              <input
-                type="text"
-                placeholder="John"
-                value={formState.firstName}
-                onChange={(e) => setFormState((prev) => ({ ...prev, firstName: e.target.value }))}
-                className="w-full px-4 py-3 bg-black/40 border border-cyan-500/30 rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:border-cyan-400 transition"
-              />
-            </div>
-
-            {/* Passenger Counter */}
-            <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
-              <p className="text-foreground/60 text-sm mb-1">Total Passengers Ready to Board</p>
-              <p className="text-3xl font-bold text-cyan-400">{formState.totalPassengers}</p>
-            </div>
-
-            {/* Submit Buttons */}
-            <div className="space-y-3">
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-3 rounded-lg transition-all disabled:opacity-50"
-              >
-                {isLoading ? "Processing..." : "Get My Boarding Pass ($0.01)"}
-              </Button>
-
-              <Button
-                type="button"
-                onClick={handleSkipPayment}
-                disabled={isLoading}
-                variant="outline"
-                className="w-full py-3"
-              >
-                {isLoading ? "Processing..." : "Join Waitlist (Skip Payment)"}
-              </Button>
-            </div>
-          </form>
-        </Card>
-
-        {/* Footer Info */}
-        <div className="text-center text-foreground/60 text-sm">
-          <p>💳 Secure payment powered by Stripe</p>
-          <p className="mt-2">🔒 Your data is safe and encrypted</p>
-        </div>
       </div>
+
+      {/* Footer */}
+      <footer className="w-full px-6 py-4 border-t border-cyan-500/20 text-center space-y-1">
+        <a
+          href="https://thispagedoesnotexist12345.com/"
+          className="block text-cyan-400/70 hover:text-cyan-400 text-sm transition font-mono"
+        >
+          ← Back to Main Site (.com)
+        </a>
+        <p className="text-foreground/40 text-xs font-mono">
+          February Black Glass Theme – Limited Edition (Expires Mar 1)
+        </p>
+      </footer>
     </div>
   );
 }
