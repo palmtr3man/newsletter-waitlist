@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { Plane, Users, Share2, AlertCircle, CheckCircle, Settings } from "lucide-react";
+import { Plane, Users, Share2, AlertCircle, CheckCircle, Settings, Sparkles } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { EmailPreferences } from "@/components/EmailPreferences";
@@ -293,6 +293,22 @@ export default function Home() {
                 passengerName={formState.firstName || "Passenger"}
               />
             )}
+
+            {/* V3 Roadmap Teaser */}
+            <div className="mb-6 animate-in fade-in duration-700">
+              <Card className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 p-6 backdrop-blur-xl">
+                <div className="flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-purple-300 font-mono text-xs mb-1 uppercase tracking-widest">Coming in V3</p>
+                    <h3 className="text-white font-bold text-lg mb-2">The Ultimate Journey Dashboard — Next Level</h3>
+                    <p className="text-foreground/70 text-sm leading-relaxed">
+                      V3 brings AI-powered job matching, one-click application tracking, and a live BMAC supporter tier with early access to premium tools. Early passengers board first.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            </div>
 
             <div className="space-y-4">
               <div className="flex gap-3">

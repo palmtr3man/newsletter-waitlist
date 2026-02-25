@@ -1,48 +1,3 @@
-
-
-/**
- * Send internal signup notification to admin addresses
- */
-export async function sendInternalNotification(
-  userEmail: string,
-  firstName: string,
-  tier: "paid" | "free",
-  amountPaid?: number
-): Promise<{ success: boolean; error?: string }> {
-  if (!SENDGRID_API_KEY) {
-    console.warn("[Email] SendGrid API key not configured, skipping internal notification");
-    return { success: false, error: "SendGrid not configured" };
-  }
-
-  const signupDate = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
-  const tierLabel = tier === "paid" ? `Paid ($${((amountPaid || 1) / 100).toFixed(2)})` : "Free";
-
-  const subject = `[New Signup] ${firstName || userEmail} — ${tierLabel} — ${signupDate}`;
-  const html = `
-    <h2>New Signup on The Ultimate Journey</h2>
-    <table style="border-collapse:collapse; font-family: monospace;">
-      <tr><td style="padding:4px 12px 4px 0; color:#999;">Email</td><td style="padding:4px 0;"><strong>${userEmail}</strong></td></tr>
-      <tr><td style="padding:4px 12px 4px 0; color:#999;">Name</td><td style="padding:4px 0;">${firstName || "—"}</td></tr>
-      <tr><td style="padding:4px 12px 4px 0; color:#999;">Tier</td><td style="padding:4px 0;">${tierLabel}</td></tr>
-      <tr><td style="padding:4px 12px 4px 0; color:#999;">Date</td><td style="padding:4px 0;">${signupDate}</td></tr>
-    </table>
-  `;
-
-  try {
-    await sgMail.send({
-      to: ["k.clark7@gmail.com", "support@thispagedoesnotexist12345.com"],
-      from: { email: SENDER_EMAIL, name: SENDER_NAME },
-      subject,
-      html,
-      text: `New Signup: ${userEmail} | ${tierLabel} | ${signupDate}`,
-    });
-    console.log(`[Email] Internal notification sent for ${userEmail}`);
-    return { success: true };
-  } catch (error) {
-    console.error("[Email] Failed to send internal notification:", error);
-    return { success: false, error: String(error) };
-  }
-}
 import sgMail from "@sendgrid/mail";
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
@@ -127,17 +82,27 @@ export async function sendPaymentReceiptEmail(
 }
 
 /**
- * Send boarding pass confirmation email (for waitlist without payment)
+ * Send boarding pass confirmation email (for waitlist without payment).
+ *
+ * @param giftLinkUrl  Optional Beehiiv gift subscription URL. When provided, a
+ *                     "Claim your gifted dashboard" CTA button is injected into
+ *                     both the HTML and plain-text versions of the email.
+ *                     Reads from process.env.BEEHIIV_GIFT_LINK_URL when not
+ *                     supplied explicitly.
  */
 export async function sendBoardingPassEmail(
   email: string,
   name: string,
-  queuePosition: number
+  queuePosition: number,
+  giftLinkUrl?: string
 ) {
   if (!SENDGRID_API_KEY) {
     console.warn("[Email] SendGrid API key not configured, skipping email");
     return { success: false, error: "SendGrid not configured" };
   }
+
+  // Fall back to the environment variable if no explicit value is passed
+  const resolvedGiftLink = giftLinkUrl ?? process.env.BEEHIIV_GIFT_LINK_URL;
 
   try {
     const msg = {
@@ -147,8 +112,8 @@ export async function sendBoardingPassEmail(
         name: SENDER_NAME,
       },
       subject: "🎫 Your Boarding Pass - You're on the Waitlist!",
-      html: generateBoardingPassHTML(name, queuePosition),
-      text: generateBoardingPassText(name, queuePosition),
+      html: generateBoardingPassHTML(name, queuePosition, resolvedGiftLink),
+      text: generateBoardingPassText(name, queuePosition, resolvedGiftLink),
     };
 
     await sgMail.send(msg);
@@ -159,6 +124,54 @@ export async function sendBoardingPassEmail(
     return { success: false, error: String(error) };
   }
 }
+
+/**
+ * Send internal signup notification to admin addresses
+ */
+export async function sendInternalNotification(
+  userEmail: string,
+  firstName: string,
+  tier: "paid" | "free",
+  amountPaid?: number
+): Promise<{ success: boolean; error?: string }> {
+  if (!SENDGRID_API_KEY) {
+    console.warn("[Email] SendGrid API key not configured, skipping internal notification");
+    return { success: false, error: "SendGrid not configured" };
+  }
+
+  const signupDate = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
+  const tierLabel = tier === "paid" ? `Paid ($${((amountPaid || 1) / 100).toFixed(2)})` : "Free";
+
+  const subject = `[New Signup] ${firstName || userEmail} — ${tierLabel} — ${signupDate}`;
+  const html = `
+    <h2>New Signup on The Ultimate Journey</h2>
+    <table style="border-collapse:collapse; font-family: monospace;">
+      <tr><td style="padding:4px 12px 4px 0; color:#999;">Email</td><td style="padding:4px 0;"><strong>${userEmail}</strong></td></tr>
+      <tr><td style="padding:4px 12px 4px 0; color:#999;">Name</td><td style="padding:4px 0;">${firstName || "—"}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0; color:#999;">Tier</td><td style="padding:4px 0;">${tierLabel}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0; color:#999;">Date</td><td style="padding:4px 0;">${signupDate}</td></tr>
+    </table>
+  `;
+
+  try {
+    await sgMail.send({
+      to: ["k.clark7@gmail.com", "support@thispagedoesnotexist12345.com"],
+      from: { email: SENDER_EMAIL, name: SENDER_NAME },
+      subject,
+      html,
+      text: `New Signup: ${userEmail} | ${tierLabel} | ${signupDate}`,
+    });
+    console.log(`[Email] Internal notification sent for ${userEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error("[Email] Failed to send internal notification:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Template generators
+// ---------------------------------------------------------------------------
 
 /**
  * Generate payment receipt HTML email
@@ -285,10 +298,29 @@ If you have any questions, please reply to this email.
 }
 
 /**
- * Generate boarding pass HTML email (for waitlist without payment)
+ * Generate boarding pass HTML email (for waitlist without payment).
+ *
+ * When giftLinkUrl is provided, a "Claim your gifted dashboard" button is
+ * rendered below the primary boarding-pass CTA.
  */
-function generateBoardingPassHTML(name: string, queuePosition: number): string {
+function generateBoardingPassHTML(
+  name: string,
+  queuePosition: number,
+  giftLinkUrl?: string
+): string {
   const boardingPassUrl = `https://newsletter.thispagedoesnotexist12345.us/?boarding=${queuePosition}`;
+
+  const giftBlock = giftLinkUrl
+    ? `
+      <div style="margin-top: 24px; text-align: center;">
+        <p style="color: #ccc; font-size: 14px; margin-bottom: 12px;">
+          🎁 As a thank-you for joining early, here's a free copy of the TUJ Dashboard V2:
+        </p>
+        <a href="${giftLinkUrl}" class="button" style="background: #7c3aed; color: #ffffff;">
+          Claim Your Gifted Dashboard
+        </a>
+      </div>`
+    : "";
 
   return `
 <!DOCTYPE html>
@@ -347,6 +379,8 @@ function generateBoardingPassHTML(name: string, queuePosition: number): string {
         <a href="${boardingPassUrl}" class="button">View Your Boarding Pass</a>
       </center>
 
+      ${giftBlock}
+
       <p style="color: #999; font-size: 14px; margin-top: 30px;">
         Invite your friends to join The Ultimate Journey and move up the queue!
       </p>
@@ -361,9 +395,24 @@ function generateBoardingPassHTML(name: string, queuePosition: number): string {
 }
 
 /**
- * Generate boarding pass plain text email
+ * Generate boarding pass plain text email.
+ *
+ * When giftLinkUrl is provided, a gift dashboard claim line is appended.
  */
-function generateBoardingPassText(name: string, queuePosition: number): string {
+function generateBoardingPassText(
+  name: string,
+  queuePosition: number,
+  giftLinkUrl?: string
+): string {
+  const giftSection = giftLinkUrl
+    ? `
+🎁 GIFTED DASHBOARD
+===================
+As a thank-you for joining early, claim your free copy of the TUJ Dashboard V2:
+${giftLinkUrl}
+`
+    : "";
+
   return `
 Hello ${name},
 
@@ -378,7 +427,7 @@ Flight Status: PRE-BOARDING
 You're now on the pre-boarding list. We'll notify you when boarding begins and exclusive content becomes available.
 
 View your boarding pass: https://newsletter.thispagedoesnotexist12345.us/?boarding=${queuePosition}
-
+${giftSection}
 Invite your friends to join The Ultimate Journey and move up the queue!
 
 © 2026 The Ultimate Journey. All rights reserved.
