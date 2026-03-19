@@ -1,9 +1,10 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useEffect, useState } from "react";
-import { trpc } from "@/lib/trpc";
-import { Users, Mail, TrendingUp, Eye } from "lucide-react";
+import { Users, Mail, TrendingUp, Eye, Radio, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 
 interface SubscriberMetrics {
   totalSubscribers: number;
@@ -23,11 +24,21 @@ interface Subscriber {
   createdAt: Date;
 }
 
+interface SeatOpenedResult {
+  type: "success" | "error";
+  message: string;
+}
+
 export default function AdminDashboard() {
   const { user, isAuthenticated } = useAuth();
   const [metrics, setMetrics] = useState<SubscriberMetrics | null>(null);
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Seat ID trigger state
+  const [seatId, setSeatId] = useState("");
+  const [seatLoading, setSeatLoading] = useState(false);
+  const [seatResult, setSeatResult] = useState<SeatOpenedResult | null>(null);
 
   // Check if user is admin
   if (!isAuthenticated || user?.role !== "admin") {
@@ -45,6 +56,38 @@ export default function AdminDashboard() {
       </div>
     );
   }
+
+  const handleTriggerSeatOpened = async () => {
+    if (!seatId.trim()) return;
+    setSeatLoading(true);
+    setSeatResult(null);
+    try {
+      const response = await fetch("/api/handleSeatOpened", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seatid: seatId.trim() }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.message || `Request failed with status ${response.status}`);
+      }
+      const data = await response.json();
+      setSeatResult({
+        type: "success",
+        message: `handleSeatOpened triggered for "${seatId.trim()}". ${
+          data?.email_sent_to ? `Email sent to ${data.email_sent_to}.` : "Done."
+        }`,
+      });
+      setSeatId("");
+    } catch (err: unknown) {
+      setSeatResult({
+        type: "error",
+        message: err instanceof Error ? err.message : "handleSeatOpened failed",
+      });
+    } finally {
+      setSeatLoading(false);
+    }
+  };
 
   useEffect(() => {
     // Simulate fetching metrics and subscribers
@@ -102,6 +145,63 @@ export default function AdminDashboard() {
             Manage subscribers and track email campaign performance
           </p>
         </div>
+
+        {/* Seat Opened Trigger */}
+        <Card className="p-6 bg-gradient-to-br from-indigo-500/10 to-violet-500/10 border-indigo-500/30 mb-8">
+          <h2 className="text-xl font-bold text-foreground mb-1 flex items-center gap-2">
+            <Radio className="w-5 h-5 text-indigo-400" /> Trigger handleSeatOpened
+          </h2>
+          <p className="text-foreground/50 text-sm mb-4">
+            Manually invoke the seat-opened backend function for a given seat ID.
+          </p>
+
+          {/* Result feedback */}
+          {seatResult && (
+            <div
+              className={`flex items-start gap-3 p-3 rounded-lg border mb-4 text-sm ${
+                seatResult.type === "success"
+                  ? "bg-green-500/10 border-green-500/30 text-green-400"
+                  : "bg-red-500/10 border-red-500/30 text-red-400"
+              }`}
+            >
+              {seatResult.type === "success" ? (
+                <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              )}
+              <span>{seatResult.message}</span>
+              <button
+                onClick={() => setSeatResult(null)}
+                className="ml-auto opacity-60 hover:opacity-100 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <Label htmlFor="seat-id-input" className="text-xs text-foreground/50 mb-1 block">
+                Seat ID
+              </Label>
+              <Input
+                id="seat-id-input"
+                placeholder="e.g. seat_1"
+                value={seatId}
+                onChange={(e) => setSeatId(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleTriggerSeatOpened()}
+                className="bg-black/20 border-indigo-500/30"
+              />
+            </div>
+            <Button
+              onClick={handleTriggerSeatOpened}
+              disabled={!seatId.trim() || seatLoading}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              {seatLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Trigger"}
+            </Button>
+          </div>
+        </Card>
 
         {/* Metrics Grid */}
         {metrics && (
