@@ -1,0 +1,3 @@
+# Redirect www and apex .us to newsletter subdomain
+https://www.thispagedoesnotexist12345.us/*  https://newsletter.thispagedoesnotexist12345.us/:splat  301!
+https://thispagedoesnotexist12345.us/*      https://newsletter.thispagedoesnotexist12345.us/:splat  301!
