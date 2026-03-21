@@ -1,0 +1,16 @@
+[build]
+  command = "pnpm run build"
+  publish = "dist/public"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "https://www.thispagedoesnotexist12345.us/*"
+  to = "https://newsletter.thispagedoesnotexist12345.us/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://thispagedoesnotexist12345.us/*"
+  to = "https://newsletter.thispagedoesnotexist12345.us/:splat"
+  status = 301
+  force = true
