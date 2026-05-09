@@ -175,7 +175,7 @@ export default function Home() {
         isVip: result.isVip,
         successfulReferrals: result.successfulReferrals,
       }));
-      toast.info("Added to waitlist! (Payment skipped)");
+      toast.success("Flight plan received. Check your email to confirm your Signal subscription.");
     } catch (error) {
       toast.error("Failed to join waitlist. Please try again.");
     } finally {
@@ -280,6 +280,14 @@ export default function Home() {
                     <div className="font-mono text-xs text-cyan-400/60 text-center">
                       ▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌
                     </div>
+                  </div>
+
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 text-center">
+                    <CheckCircle className="w-5 h-5 text-green-400 mx-auto mb-2" />
+                    <p className="text-green-300 font-semibold">Flight plan received.</p>
+                    <p className="text-foreground/70 text-sm mt-1">
+                      Check your email to confirm your Signal subscription. Gate 2 opens after confirmation.
+                    </p>
                   </div>
                 </div>
               </Card>
