@@ -3,6 +3,15 @@ import sgMail from "@sendgrid/mail";
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const SENDER_EMAIL = "noreply@thispagedoesnotexist12345.us";
 const SENDER_NAME = "The Ultimate Journey";
+const DEFAULT_APP_BASE_URL = "https://newsletter.thispagedoesnotexist12345.us";
+
+function getAppBaseUrl(): string {
+  return (process.env.APP_BASE_URL || process.env.VITE_APP_URL || DEFAULT_APP_BASE_URL).replace(/\/$/, "");
+}
+
+function getBoardingPassUrl(queuePosition: number): string {
+  return `${getAppBaseUrl()}/?boarding=${queuePosition}`;
+}
 
 if (SENDGRID_API_KEY) {
   sgMail.setApiKey(SENDGRID_API_KEY);
@@ -183,7 +192,7 @@ function generatePaymentReceiptHTML(
   queuePosition: number
 ): string {
   const amountFormatted = (amount / 100).toFixed(2);
-  const boardingPassUrl = `https://newsletter.thispagedoesnotexist12345.us/?boarding=${queuePosition}`;
+  const boardingPassUrl = getBoardingPassUrl(queuePosition);
 
   return `
 <!DOCTYPE html>
@@ -289,7 +298,7 @@ Payment ID: ${paymentId}
 
 You're now on the pre-boarding list for The Ultimate Journey. We'll notify you when boarding begins.
 
-View your boarding pass: https://newsletter.thispagedoesnotexist12345.us/?boarding=${queuePosition}
+View your boarding pass: ${getBoardingPassUrl(queuePosition)}
 
 If you have any questions, please reply to this email.
 
@@ -308,7 +317,7 @@ function generateBoardingPassHTML(
   queuePosition: number,
   giftLinkUrl?: string
 ): string {
-  const boardingPassUrl = `https://newsletter.thispagedoesnotexist12345.us/?boarding=${queuePosition}`;
+  const boardingPassUrl = getBoardingPassUrl(queuePosition);
 
   const giftBlock = giftLinkUrl
     ? `
@@ -426,7 +435,7 @@ Flight Status: PRE-BOARDING
 
 You're now on the pre-boarding list. We'll notify you when boarding begins and exclusive content becomes available.
 
-View your boarding pass: https://newsletter.thispagedoesnotexist12345.us/?boarding=${queuePosition}
+View your boarding pass: ${getBoardingPassUrl(queuePosition)}
 ${giftSection}
 Invite your friends to join The Ultimate Journey and move up the queue!
 
