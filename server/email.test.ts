@@ -125,4 +125,60 @@ describe("Email Service", () => {
       expect(response[0].statusCode).toBe(202);
     });
   });
+
+  describe("Beehiiv gifted-dashboard CTA rendering", () => {
+    const originalEnv = { ...process.env };
+
+    beforeEach(() => {
+      vi.resetModules();
+      vi.clearAllMocks();
+      process.env = { ...originalEnv };
+      process.env.SENDGRID_API_KEY = "SG.test-key";
+    });
+
+    it("renders the gifted-dashboard CTA in HTML and plain text from BEEHIIV_GIFT_LINK_URL", async () => {
+      const giftUrl = "https://newsletter.thispagedoesnotexist12345.us/dashboard-v2.xlsx";
+      process.env.BEEHIIV_GIFT_LINK_URL = giftUrl;
+
+      const { sendBoardingPassEmail } = await import("./email");
+      const result = await sendBoardingPassEmail("passenger@example.com", "Jane Passenger", 7);
+
+      expect(result).toEqual({ success: true });
+      expect(sgMail.default.send).toHaveBeenCalledTimes(1);
+
+      const [message] = vi.mocked(sgMail.default.send).mock.calls[0];
+      expect(message.html).toContain("Claim Your Gifted Dashboard");
+      expect(message.html).toContain(`href=\"${giftUrl}\"`);
+      expect(message.text).toContain("GIFTED DASHBOARD");
+      expect(message.text).toContain(giftUrl);
+      expect(message.html).toContain("View Your Boarding Pass");
+      expect(message.html).toContain("?boarding=7");
+    });
+
+    it("uses an explicit gifted-dashboard URL before the environment fallback", async () => {
+      process.env.BEEHIIV_GIFT_LINK_URL = "https://example.com/env-dashboard.xlsx";
+      const explicitGiftUrl = "https://example.com/explicit-dashboard.xlsx";
+
+      const { sendBoardingPassEmail } = await import("./email");
+      await sendBoardingPassEmail("passenger@example.com", "Jane Passenger", 8, explicitGiftUrl);
+
+      const [message] = vi.mocked(sgMail.default.send).mock.calls[0];
+      expect(message.html).toContain(`href=\"${explicitGiftUrl}\"`);
+      expect(message.html).not.toContain(process.env.BEEHIIV_GIFT_LINK_URL);
+      expect(message.text).toContain(explicitGiftUrl);
+    });
+
+    it("omits the gifted-dashboard CTA when no gift URL is configured", async () => {
+      delete process.env.BEEHIIV_GIFT_LINK_URL;
+
+      const { sendBoardingPassEmail } = await import("./email");
+      await sendBoardingPassEmail("passenger@example.com", "Jane Passenger", 9);
+
+      const [message] = vi.mocked(sgMail.default.send).mock.calls[0];
+      expect(message.html).not.toContain("Claim Your Gifted Dashboard");
+      expect(message.text).not.toContain("GIFTED DASHBOARD");
+      expect(message.html).toContain("View Your Boarding Pass");
+      expect(message.html).toContain("?boarding=9");
+    });
+  });
 });
