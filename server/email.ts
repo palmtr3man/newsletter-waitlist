@@ -3,7 +3,7 @@ import sgMail from "@sendgrid/mail";
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const SENDER_EMAIL = "noreply@thispagedoesnotexist12345.us";
 const SENDER_NAME = "The Ultimate Journey";
-const DEFAULT_APP_BASE_URL = "https://newsletter.thispagedoesnotexist12345.us";
+const DEFAULT_APP_BASE_URL = "https://newsletter-waitlist.netlify.app";
 
 function getAppBaseUrl(): string {
   return (process.env.APP_BASE_URL || process.env.VITE_APP_URL || DEFAULT_APP_BASE_URL).replace(/\/$/, "");
