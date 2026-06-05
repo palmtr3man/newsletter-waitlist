@@ -435,9 +435,9 @@ export default function Home() {
                 />
               </div>
 
-              <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
-                <p className="text-foreground/60 text-sm mb-1">Total Passengers Ready to Board</p>
-                <p className="text-3xl font-bold text-cyan-400">{formState.totalPassengers}</p>
+              <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-center flex flex-col items-center justify-center">
+                <p className="text-foreground/60 text-sm mb-1 text-center">Total Passengers Ready to Board</p>
+                <p className="text-3xl font-bold text-cyan-400 text-center">{formState.totalPassengers}</p>
               </div>
 
               <div className="space-y-3">
@@ -462,7 +462,7 @@ export default function Home() {
           </Card>
 
           <div className="text-center text-foreground/60 text-sm">
-            <p>💳 Secure payment powered by Stripe</p>
+            <p>💳 Secure support powered by Buy Me a Coffee</p>
             <p className="mt-2">🔒 Your data is safe and encrypted</p>
           </div>
         </div>
