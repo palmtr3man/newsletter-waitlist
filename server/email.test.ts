@@ -41,10 +41,10 @@ describe("Email Service", () => {
 
     it("should include boarding pass URL", () => {
       const queuePosition = 50;
-      const boardingPassUrl = `https://newsletter.thispagedoesnotexist12345.us/?boarding=${queuePosition}`;
+      const boardingPassUrl = `https://newsletter-waitlist.netlify.app/?boarding=${queuePosition}`;
 
       expect(boardingPassUrl).toContain("boarding=50");
-      expect(boardingPassUrl).toContain("newsletter.thispagedoesnotexist12345.us");
+      expect(boardingPassUrl).toContain("newsletter-waitlist.netlify.app");
     });
   });
 
