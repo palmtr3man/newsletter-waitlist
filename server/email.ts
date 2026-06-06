@@ -1,9 +1,21 @@
 import sgMail from "@sendgrid/mail";
 
+type EmailProvider = "sendgrid" | "brevo";
+
+type EmailSendOptions = {
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+};
+
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || process.env.email_provider || "sendgrid").toLowerCase();
 const SENDER_EMAIL = "noreply@thispagedoesnotexist12345.us";
 const SENDER_NAME = "The Ultimate Journey";
 const DEFAULT_APP_BASE_URL = "https://newsletter.thispagedoesnotexist12345.us";
+const DEFAULT_ADMIN_ALERT_EMAILS = ["k.clark7@gmail.com", "support@thispagedoesnotexist12345.com"];
 
 function getAppBaseUrl(): string {
   return (process.env.APP_BASE_URL || process.env.VITE_APP_URL || DEFAULT_APP_BASE_URL).replace(/\/$/, "");
@@ -17,36 +29,96 @@ if (SENDGRID_API_KEY) {
   sgMail.setApiKey(SENDGRID_API_KEY);
 }
 
-/**
- * Generic email sending function
- */
-export async function sendEmail(
-  options: {
-    to: string;
-    subject: string;
-    html: string;
-    text?: string;
-  }
-) {
-  if (!SENDGRID_API_KEY) {
-    console.warn("[Email] SendGrid API key not configured, skipping email");
-    return { success: false, error: "SendGrid not configured" };
+function getAdminAlertRecipients(): string[] {
+  return (process.env.ADMIN_ALERT_EMAILS || DEFAULT_ADMIN_ALERT_EMAILS.join(","))
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);
+}
+
+function getActiveEmailProvider(): EmailProvider | null {
+  if (EMAIL_PROVIDER === "brevo") {
+    return BREVO_API_KEY ? "brevo" : null;
   }
 
-  try {
-    const msg = {
-      to: options.to,
-      from: {
+  if (EMAIL_PROVIDER === "sendgrid") {
+    return SENDGRID_API_KEY ? "sendgrid" : null;
+  }
+
+  if (EMAIL_PROVIDER === "auto") {
+    if (BREVO_API_KEY) return "brevo";
+    if (SENDGRID_API_KEY) return "sendgrid";
+    return null;
+  }
+
+  console.warn(`[Email] Unknown EMAIL_PROVIDER=${EMAIL_PROVIDER}; falling back to SendGrid`);
+  return SENDGRID_API_KEY ? "sendgrid" : null;
+}
+
+function getMissingProviderError(): string {
+  if (EMAIL_PROVIDER === "brevo") return "Brevo not configured";
+  if (EMAIL_PROVIDER === "sendgrid") return "SendGrid not configured";
+  return "Email provider not configured";
+}
+
+async function sendViaBrevo(options: EmailSendOptions) {
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "accept": "application/json",
+      "api-key": BREVO_API_KEY || "",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      sender: {
         email: SENDER_EMAIL,
         name: SENDER_NAME,
       },
+      to: (Array.isArray(options.to) ? options.to : [options.to]).map((email) => ({ email })),
       subject: options.subject,
-      html: options.html,
-      text: options.text || options.html,
-    };
+      htmlContent: options.html,
+      textContent: options.text || options.html,
+    }),
+  });
 
-    await sgMail.send(msg);
-    console.log(`[Email] Email sent to ${options.to}`);
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    throw new Error(`Brevo API error ${response.status}: ${errorBody}`);
+  }
+}
+
+async function sendViaConfiguredProvider(options: EmailSendOptions): Promise<EmailProvider> {
+  const provider = getActiveEmailProvider();
+
+  if (!provider) {
+    throw new Error(getMissingProviderError());
+  }
+
+  if (provider === "brevo") {
+    await sendViaBrevo(options);
+    return provider;
+  }
+
+  await sgMail.send({
+    to: options.to,
+    from: {
+      email: SENDER_EMAIL,
+      name: SENDER_NAME,
+    },
+    subject: options.subject,
+    html: options.html,
+    text: options.text || options.html,
+  });
+  return provider;
+}
+
+/**
+ * Generic email sending function
+ */
+export async function sendEmail(options: EmailSendOptions) {
+  try {
+    const provider = await sendViaConfiguredProvider(options);
+    console.log(`[Email] Email sent to ${options.to} via ${provider}`);
     return { success: true };
   } catch (error) {
     console.error("[Email] Failed to send email:", error);
@@ -64,25 +136,14 @@ export async function sendPaymentReceiptEmail(
   paymentId: string,
   queuePosition: number
 ) {
-  if (!SENDGRID_API_KEY) {
-    console.warn("[Email] SendGrid API key not configured, skipping email");
-    return { success: false, error: "SendGrid not configured" };
-  }
-
   try {
-    const msg = {
+    const provider = await sendViaConfiguredProvider({
       to: email,
-      from: {
-        email: SENDER_EMAIL,
-        name: SENDER_NAME,
-      },
       subject: "✈️ Payment Confirmed - Your Boarding Pass is Ready",
       html: generatePaymentReceiptHTML(name, paymentAmount, paymentId, queuePosition),
       text: generatePaymentReceiptText(name, paymentAmount, paymentId, queuePosition),
-    };
-
-    await sgMail.send(msg);
-    console.log(`[Email] Payment receipt sent to ${email}`);
+    });
+    console.log(`[Email] Payment receipt sent to ${email} via ${provider}`);
     return { success: true };
   } catch (error) {
     console.error("[Email] Failed to send payment receipt:", error);
@@ -105,28 +166,17 @@ export async function sendBoardingPassEmail(
   queuePosition: number,
   giftLinkUrl?: string
 ) {
-  if (!SENDGRID_API_KEY) {
-    console.warn("[Email] SendGrid API key not configured, skipping email");
-    return { success: false, error: "SendGrid not configured" };
-  }
-
   // Fall back to the environment variable if no explicit value is passed
   const resolvedGiftLink = giftLinkUrl ?? process.env.BEEHIIV_GIFT_LINK_URL;
 
   try {
-    const msg = {
+    const provider = await sendViaConfiguredProvider({
       to: email,
-      from: {
-        email: SENDER_EMAIL,
-        name: SENDER_NAME,
-      },
       subject: "🎫 Your Boarding Pass - You're on the Waitlist!",
       html: generateBoardingPassHTML(name, queuePosition, resolvedGiftLink),
       text: generateBoardingPassText(name, queuePosition, resolvedGiftLink),
-    };
-
-    await sgMail.send(msg);
-    console.log(`[Email] Boarding pass sent to ${email}`);
+    });
+    console.log(`[Email] Boarding pass sent to ${email} via ${provider}`);
     return { success: true };
   } catch (error) {
     console.error("[Email] Failed to send boarding pass:", error);
@@ -143,11 +193,6 @@ export async function sendInternalNotification(
   tier: "paid" | "free",
   amountPaid?: number
 ): Promise<{ success: boolean; error?: string }> {
-  if (!SENDGRID_API_KEY) {
-    console.warn("[Email] SendGrid API key not configured, skipping internal notification");
-    return { success: false, error: "SendGrid not configured" };
-  }
-
   const signupDate = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
   const tierLabel = tier === "paid" ? `Paid ($${((amountPaid || 1) / 100).toFixed(2)})` : "Free";
 
@@ -163,14 +208,13 @@ export async function sendInternalNotification(
   `;
 
   try {
-    await sgMail.send({
-      to: ["k.clark7@gmail.com", "support@thispagedoesnotexist12345.com"],
-      from: { email: SENDER_EMAIL, name: SENDER_NAME },
+    const provider = await sendViaConfiguredProvider({
+      to: getAdminAlertRecipients(),
       subject,
       html,
       text: `New Signup: ${userEmail} | ${tierLabel} | ${signupDate}`,
     });
-    console.log(`[Email] Internal notification sent for ${userEmail}`);
+    console.log(`[Email] Internal notification sent for ${userEmail} via ${provider}`);
     return { success: true };
   } catch (error) {
     console.error("[Email] Failed to send internal notification:", error);
