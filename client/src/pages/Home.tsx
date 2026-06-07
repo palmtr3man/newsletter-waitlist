@@ -435,7 +435,7 @@ export default function Home() {
                 />
               </div>
 
-              <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+              <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-center flex flex-col items-center">
                 <p className="text-foreground/60 text-sm mb-1">Total Passengers Ready to Board</p>
                 <p className="text-3xl font-bold text-cyan-400">{formState.totalPassengers}</p>
               </div>
@@ -462,8 +462,8 @@ export default function Home() {
           </Card>
 
           <div className="text-center text-foreground/60 text-sm">
-            <p>💳 Secure payment powered by Stripe</p>
-            <p className="mt-2">🔒 Your data is safe and encrypted</p>
+            <p>BMAC penny-increment support: start at $0.01, then add optional $0.01 boosts when you want to move the mission forward.</p>
+            <p className="mt-2">Boarding details stay limited to the flight manifest and Signal confirmation flow.</p>
           </div>
         </div>
       </div>
