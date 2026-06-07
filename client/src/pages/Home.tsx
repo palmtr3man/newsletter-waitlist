@@ -55,6 +55,17 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [showEmailPreferences, setShowEmailPreferences] = useState(false);
 
+  // Calculate dynamic price: $0.01 + $0.01 per day since June 7, 2026
+  const getDynamicPrice = () => {
+    const startDate = new Date("2026-06-07");
+    const today = new Date();
+    const diffTime = Math.max(0, today.getTime() - startDate.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const priceCents = 1 + diffDays;
+    return (priceCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  };
+  const currentPrice = getDynamicPrice();
+
   // Apply Black Glass theme on mount
   useEffect(() => {
     initTheme();
@@ -435,7 +446,7 @@ export default function Home() {
                 />
               </div>
 
-              <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+              <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-center">
                 <p className="text-foreground/60 text-sm mb-1">Total Passengers Ready to Board</p>
                 <p className="text-3xl font-bold text-cyan-400">{formState.totalPassengers}</p>
               </div>
@@ -446,7 +457,7 @@ export default function Home() {
                   disabled={isLoading}
                   className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-3 rounded-lg transition-all disabled:opacity-50"
                 >
-                  {isLoading ? "Processing..." : "Get My Boarding Pass ($0.01)"}
+                  {isLoading ? "Processing..." : `Get My Boarding Pass (${currentPrice})`}
                 </Button>
                 <Button
                   type="button"
@@ -462,8 +473,8 @@ export default function Home() {
           </Card>
 
           <div className="text-center text-foreground/60 text-sm">
-            <p>💳 Secure payment powered by Stripe</p>
-            <p className="mt-2">🔒 Your data is safe and encrypted</p>
+            <p>💳 Secure payment powered by BMAC. This Get My Boarding Pass ($0.01) will start incrementing by a penny every day leading up to May 27 2027...</p>
+            <p className="mt-2">🔒 Your data is secure and matched only within the Corporate Games ecosystem.</p>
           </div>
         </div>
       </div>
@@ -473,7 +484,7 @@ export default function Home() {
         <a
           href="https://thispagedoesnotexist12345.com/"
           className="block text-cyan-400/70 hover:text-cyan-400 text-sm transition font-mono"
-        >
+          >
           ← Back to Main Site (.com)
         </a>
         <p className="text-foreground/40 text-xs font-mono">
