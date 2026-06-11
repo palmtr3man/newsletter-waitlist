@@ -1,20 +1,19 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { Plane, Users, Share2, AlertCircle, CheckCircle, Settings, Sparkles } from "lucide-react";
+import { Mail, Users, Share2, AlertCircle, CheckCircle, Settings, Sparkles } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { EmailPreferences } from "@/components/EmailPreferences";
 import { ReferralInvite } from "@/components/ReferralInvite";
 
 /**
- * Newsletter Waitlist Landing Page with Stripe Payment
+ * Newsletter landing page
  *
- * Design: February Black Glass Theme (Limited Edition, expires Mar 1 2026)
- * - Dark glass morphism with cyan neon accents
- * - Aviation-themed boarding pass confirmation
- * - Real-time queue position tracking
- * - Stripe $0.01 payment integration
+ * Design: dark glass theme with cyan accents.
+ * - Outcome-focused subscription copy
+ * - Single hero email capture path
+ * - Referral and preference tools after signup
  */
 
 // Auto-expire theme: revert to default after March 1 2026
@@ -109,7 +108,7 @@ export default function Home() {
         isVip: result.isVip,
         successfulReferrals: result.successfulReferrals,
       }));
-      toast.success("Payment successful! Welcome aboard!");
+      toast.success("Payment successful. You are subscribed.");
       window.history.replaceState({}, document.title, window.location.pathname);
     } catch (error) {
       toast.error("Failed to confirm payment. Please try again.");
@@ -175,7 +174,7 @@ export default function Home() {
         isVip: result.isVip,
         successfulReferrals: result.successfulReferrals,
       }));
-      toast.success("Flight plan received. Check your email to confirm your Signal subscription.");
+      toast.success("Subscription received. Check your email to confirm your Signal subscription.");
     } catch (error) {
       toast.error("Failed to join waitlist. Please try again.");
     } finally {
@@ -184,7 +183,7 @@ export default function Home() {
   };
 
   const handleShare = () => {
-    const text = `I just joined The Ultimate Journey newsletter waitlist! I'm passenger #${formState.queuePosition}. Join me at https://newsletter.thispagedoesnotexist12345.us/`;
+    const text = `I just joined The Ultimate Journey newsletter for weekly job-search signals. Join me at https://newsletter.thispagedoesnotexist12345.us/`;
     if (navigator.share) {
       navigator.share({ title: "The Ultimate Journey", text });
     } else {
@@ -219,18 +218,18 @@ export default function Home() {
         {/* Header nav */}
         <header className="w-full flex items-center justify-between px-6 py-4 border-b border-cyan-500/20">
           <a
-            href="https://thispagedoesnotexist12345.com/"
+            href="https://newsletter.thispagedoesnotexist12345.us/"
             className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition font-mono text-sm"
             style={{ textShadow: "0 0 8px rgba(0,217,255,0.6)" }}
           >
-            <Plane className="w-4 h-4" />
-            thispagedoesnotexist12345.com
+            <Mail className="w-4 h-4" />
+            newsletter.thispagedoesnotexist12345.us
           </a>
         </header>
 
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="w-full max-w-2xl">
-            {/* Boarding Pass */}
+            {/* Subscription Confirmation */}
             <div className="mb-8 animate-in slide-in-from-left duration-600">
               <Card className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 p-8 backdrop-blur-xl">
                 <div className="space-y-6">
@@ -250,29 +249,29 @@ export default function Home() {
                   </div>
 
                   <div className="border-b border-cyan-500/20 pb-4">
-                    <div className="text-cyan-400 font-mono text-sm mb-2">BOARDING PASS</div>
+                    <div className="text-cyan-400 font-mono text-sm mb-2">SUBSCRIPTION CONFIRMED</div>
                     <h2 className="text-3xl font-bold text-white">
-                      {formState.firstName || "Passenger"}
+                      {formState.firstName || "Subscriber"}
                     </h2>
                     <p className="text-cyan-400/80 font-mono text-sm mt-1">{formState.email}</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-cyan-400/60 text-xs font-mono mb-1">FLIGHT</p>
-                      <p className="text-white font-bold">ULTIMATE-JOURNEY-2026</p>
+                      <p className="text-cyan-400/60 text-xs font-mono mb-1">NEWSLETTER</p>
+                      <p className="text-white font-bold">TUJ CAREER SIGNALS</p>
                     </div>
                     <div>
-                      <p className="text-cyan-400/60 text-xs font-mono mb-1">DEPARTURE</p>
-                      <p className="text-white font-bold">March 2026</p>
+                      <p className="text-cyan-400/60 text-xs font-mono mb-1">CADENCE</p>
+                      <p className="text-white font-bold">Weekly</p>
                     </div>
                     <div>
-                      <p className="text-cyan-400/60 text-xs font-mono mb-1">SEAT</p>
+                      <p className="text-cyan-400/60 text-xs font-mono mb-1">QUEUE</p>
                       <p className="text-white font-bold">#{formState.queuePosition}</p>
                     </div>
                     <div>
-                      <p className="text-cyan-400/60 text-xs font-mono mb-1">GATE</p>
-                      <p className="text-white font-bold">BOARDING</p>
+                      <p className="text-cyan-400/60 text-xs font-mono mb-1">STATUS</p>
+                      <p className="text-white font-bold">Subscribed</p>
                     </div>
                   </div>
 
@@ -284,9 +283,9 @@ export default function Home() {
 
                   <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 text-center">
                     <CheckCircle className="w-5 h-5 text-green-400 mx-auto mb-2" />
-                    <p className="text-green-300 font-semibold">Flight plan received.</p>
+                    <p className="text-green-300 font-semibold">Subscription received.</p>
                     <p className="text-foreground/70 text-sm mt-1">
-                      Check your email to confirm your Signal subscription. Gate 2 opens after confirmation.
+                      Check your email to confirm your Signal subscription and start receiving weekly job-search guidance.
                     </p>
                   </div>
                 </div>
@@ -298,7 +297,7 @@ export default function Home() {
                 referralCode={formState.referralCode}
                 isVip={formState.isVip || false}
                 successfulReferrals={formState.successfulReferrals || 0}
-                passengerName={formState.firstName || "Passenger"}
+                passengerName={formState.firstName || "Subscriber"}
               />
             )}
 
@@ -311,7 +310,7 @@ export default function Home() {
                     <p className="text-purple-300 font-mono text-xs mb-1 uppercase tracking-widest">Coming in V3</p>
                     <h3 className="text-white font-bold text-lg mb-2">The Ultimate Journey Dashboard — Next Level</h3>
                     <p className="text-foreground/70 text-sm leading-relaxed">
-                      V3 brings AI-powered job matching, one-click application tracking, and a live BMAC supporter tier with early access to premium tools. Early passengers board first.
+                      V3 brings AI-powered job matching, one-click application tracking, and a supporter tier with early access to premium career tools.
                     </p>
                   </div>
                 </div>
@@ -345,13 +344,13 @@ export default function Home() {
         {/* Footer */}
         <footer className="w-full px-6 py-4 border-t border-cyan-500/20 text-center space-y-1">
           <a
-            href="https://thispagedoesnotexist12345.com/"
+            href="https://newsletter.thispagedoesnotexist12345.us/"
             className="block text-cyan-400/70 hover:text-cyan-400 text-sm transition font-mono"
           >
-            ← Back to Main Site (.com)
+            TUJ Newsletter
           </a>
           <p className="text-foreground/40 text-xs font-mono">
-            February Black Glass Theme – Limited Edition (Expires Mar 1)
+            Weekly career signals from The Ultimate Journey.
           </p>
         </footer>
 
@@ -371,38 +370,38 @@ export default function Home() {
       {/* Header nav */}
       <header className="w-full flex items-center justify-between px-6 py-4 border-b border-cyan-500/20">
         <a
-          href="https://thispagedoesnotexist12345.com/"
+          href="https://newsletter.thispagedoesnotexist12345.us/"
           className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition font-mono text-sm"
           style={{ textShadow: "0 0 8px rgba(0,217,255,0.6)" }}
         >
-          <Plane className="w-4 h-4" />
-          thispagedoesnotexist12345.com
+          <Mail className="w-4 h-4" />
+          newsletter.thispagedoesnotexist12345.us
         </a>
       </header>
 
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-2xl">
-          {/* Departure Board */}
+          {/* Signal Header */}
           <div className="mb-12 text-center animate-in fade-in duration-700">
             <div className="inline-block mb-8 p-4 border-2 border-cyan-400/50 rounded-lg bg-cyan-500/10 backdrop-blur">
-              <div className="text-cyan-400 font-mono text-sm mb-2">DEPARTURE BOARD</div>
+              <div className="text-cyan-400 font-mono text-sm mb-2">TUJ CAREER NEWSLETTER</div>
               <h1 className="text-4xl md:text-5xl font-bold text-white">
-                FLIGHT STATUS: PRE-BOARDING
+                Weekly signals to help you land your next role.
               </h1>
-              <p className="text-cyan-400/80 font-mono text-sm mt-2">Gate Opening Soon</p>
+              <p className="text-cyan-400/80 font-mono text-sm mt-2">Practical job-search insight, delivered once a week.</p>
             </div>
           </div>
 
           {/* Hero Section */}
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Your Flight is Preparing for
-              <span className="block text-cyan-400">Departure</span>
+              Move faster with clearer
+              <span className="block text-cyan-400">career signals</span>
             </h2>
             <p className="text-foreground/80 text-lg mb-6">
-              Join the pre-boarding list and be first to receive career navigation insights.
+              Practical job-search insights for operators, builders, and career switchers using TUJ to move with more confidence.
             </p>
-            <p className="text-cyan-400 font-semibold text-lg">✈️ Get your boarding pass today.</p>
+            <p className="text-cyan-400 font-semibold text-lg">One email a week. No spam. Unsubscribe anytime.</p>
           </div>
 
           {/* Signup Form */}
@@ -436,7 +435,7 @@ export default function Home() {
               </div>
 
               <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
-                <p className="text-foreground/60 text-sm mb-1">Total Passengers Ready to Board</p>
+                <p className="text-foreground/60 text-sm mb-1">Subscribers receiving weekly signals</p>
                 <p className="text-3xl font-bold text-cyan-400">{formState.totalPassengers}</p>
               </div>
 
@@ -446,7 +445,7 @@ export default function Home() {
                   disabled={isLoading}
                   className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-3 rounded-lg transition-all disabled:opacity-50"
                 >
-                  {isLoading ? "Processing..." : "Get My Boarding Pass ($0.01)"}
+                  {isLoading ? "Processing..." : "Subscribe with supporter checkout ($0.01)"}
                 </Button>
                 <Button
                   type="button"
@@ -455,15 +454,15 @@ export default function Home() {
                   variant="outline"
                   className="w-full py-3"
                 >
-                  {isLoading ? "Processing..." : "Join Waitlist (Skip Payment)"}
+                  {isLoading ? "Processing..." : "Subscribe free"}
                 </Button>
               </div>
             </form>
           </Card>
 
           <div className="text-center text-foreground/60 text-sm">
-            <p>💳 Secure payment powered by Stripe</p>
-            <p className="mt-2">🔒 Your data is safe and encrypted</p>
+            <p>Secure supporter checkout is powered by Stripe.</p>
+            <p className="mt-2">Your email is used only for TUJ newsletter updates and preferences.</p>
           </div>
         </div>
       </div>
@@ -471,13 +470,13 @@ export default function Home() {
       {/* Footer */}
       <footer className="w-full px-6 py-4 border-t border-cyan-500/20 text-center space-y-1">
         <a
-          href="https://thispagedoesnotexist12345.com/"
+          href="https://newsletter.thispagedoesnotexist12345.us/"
           className="block text-cyan-400/70 hover:text-cyan-400 text-sm transition font-mono"
         >
-          ← Back to Main Site (.com)
+          TUJ Newsletter
         </a>
         <p className="text-foreground/40 text-xs font-mono">
-          February Black Glass Theme – Limited Edition (Expires Mar 1)
+          Weekly career signals from The Ultimate Journey.
         </p>
       </footer>
     </div>
