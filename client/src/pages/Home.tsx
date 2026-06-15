@@ -434,7 +434,7 @@ export default function Home() {
                 />
               </div>
 
-              <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+              <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-center">
                 <p className="text-foreground/60 text-sm mb-1">Subscribers receiving weekly signals</p>
                 <p className="text-3xl font-bold text-cyan-400">{formState.totalPassengers}</p>
               </div>
