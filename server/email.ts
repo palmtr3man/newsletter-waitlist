@@ -1,10 +1,39 @@
+/**
+ * email.ts — Dual-stack email provider with runtime toggle
+ *
+ * EMAIL_PROVIDER env var controls the active provider at runtime:
+ *   "brevo"     → Brevo Transactional API (v3)
+ *   "sendgrid"  → SendGrid Mail API (default / fallback)
+ *   unset       → sendgrid
+ *
+ * Swap without redeploy: change EMAIL_PROVIDER in Netlify UI → redeploy
+ * or rotate via Netlify CLI: netlify env:set EMAIL_PROVIDER brevo
+ *
+ * BREVO-01 / PAL-64 — committed 2026-06-15
+ */
+
 import sgMail from "@sendgrid/mail";
 
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
-const SENDER_EMAIL = "noreply@thispagedoesnotexist12345.us";
-const SENDER_NAME = "The Ultimate Journey";
+const BREVO_API_KEY    = process.env.BREVO_API_KEY;
+const EMAIL_PROVIDER   = (process.env.EMAIL_PROVIDER || "sendgrid").toLowerCase().trim() as "sendgrid" | "brevo";
+
+const SENDER_EMAIL       = "noreply@thispagedoesnotexist12345.us";
+const SENDER_NAME        = "The Ultimate Journey";
 const DEFAULT_APP_BASE_URL = "https://newsletter.thispagedoesnotexist12345.us";
 
+const BREVO_SMTP_API = "https://api.brevo.com/v3/smtp/email";
+
+if (SENDGRID_API_KEY) {
+  sgMail.setApiKey(SENDGRID_API_KEY);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 function getAppBaseUrl(): string {
   return (process.env.APP_BASE_URL || process.env.VITE_APP_URL || DEFAULT_APP_BASE_URL).replace(/\/$/, "");
 }
@@ -13,41 +42,138 @@ function getBoardingPassUrl(queuePosition: number): string {
   return `${getAppBaseUrl()}/?boarding=${queuePosition}`;
 }
 
-if (SENDGRID_API_KEY) {
-  sgMail.setApiKey(SENDGRID_API_KEY);
+/** Active provider label for logging */
+function activeProvider(): string {
+  return EMAIL_PROVIDER === "brevo" ? "Brevo" : "SendGrid";
 }
 
-/**
- * Generic email sending function
- */
-export async function sendEmail(
-  options: {
-    to: string;
-    subject: string;
-    html: string;
-    text?: string;
+// ---------------------------------------------------------------------------
+// Brevo send primitive
+// ---------------------------------------------------------------------------
+async function sendViaBrevo(options: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<{ success: boolean; error?: string; messageId?: string }> {
+  if (!BREVO_API_KEY) {
+    return { success: false, error: "BREVO_API_KEY not configured" };
   }
-) {
+
+  const payload = {
+    sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+    to: [{ email: options.to }],
+    subject: options.subject,
+    htmlContent: options.html,
+    textContent: options.text || options.html.replace(/<[^>]+>/g, ""),
+  };
+
+  const res = await fetch(BREVO_SMTP_API, {
+    method: "POST",
+    headers: {
+      "api-key": BREVO_API_KEY,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    return { success: false, error: `Brevo ${res.status}: ${body.slice(0, 200)}` };
+  }
+
+  const data = (await res.json()) as { messageId?: string };
+  return { success: true, messageId: data.messageId };
+}
+
+// ---------------------------------------------------------------------------
+// SendGrid send primitive
+// ---------------------------------------------------------------------------
+async function sendViaSendGrid(options: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<{ success: boolean; error?: string }> {
   if (!SENDGRID_API_KEY) {
-    console.warn("[Email] SendGrid API key not configured, skipping email");
-    return { success: false, error: "SendGrid not configured" };
+    return { success: false, error: "SENDGRID_API_KEY not configured" };
   }
 
-  try {
-    const msg = {
-      to: options.to,
-      from: {
-        email: SENDER_EMAIL,
-        name: SENDER_NAME,
-      },
-      subject: options.subject,
-      html: options.html,
-      text: options.text || options.html,
-    };
+  await sgMail.send({
+    to: options.to,
+    from: { email: SENDER_EMAIL, name: SENDER_NAME },
+    subject: options.subject,
+    html: options.html,
+    text: options.text || options.html,
+  });
 
-    await sgMail.send(msg);
-    console.log(`[Email] Email sent to ${options.to}`);
-    return { success: true };
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Unified dispatch — routes to active provider, falls back to the other
+// ---------------------------------------------------------------------------
+async function dispatch(options: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<{ success: boolean; error?: string; provider?: string }> {
+  const primary   = EMAIL_PROVIDER;
+  const secondary = primary === "brevo" ? "sendgrid" : "brevo";
+
+  // Primary attempt
+  try {
+    const result =
+      primary === "brevo"
+        ? await sendViaBrevo(options)
+        : await sendViaSendGrid(options);
+
+    if (result.success) {
+      console.log(`[Email] Sent via ${activeProvider()} to ${options.to}`);
+      return { ...result, provider: primary };
+    }
+
+    console.warn(`[Email] ${activeProvider()} failed (${result.error}), trying ${secondary} fallback`);
+  } catch (err) {
+    console.warn(`[Email] ${activeProvider()} threw (${String(err)}), trying ${secondary} fallback`);
+  }
+
+  // Fallback attempt
+  try {
+    const fallback =
+      secondary === "brevo"
+        ? await sendViaBrevo(options)
+        : await sendViaSendGrid(options);
+
+    if (fallback.success) {
+      console.log(`[Email] Fallback sent via ${secondary} to ${options.to}`);
+      return { ...fallback, provider: secondary };
+    }
+
+    return { success: false, error: `Both providers failed. Last: ${fallback.error}`, provider: secondary };
+  } catch (err) {
+    return { success: false, error: `Both providers threw. Last: ${String(err)}` };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Generic email sending function.
+ * Routes to EMAIL_PROVIDER (default: sendgrid) with automatic fallback.
+ */
+export async function sendEmail(options: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    return await dispatch(options);
   } catch (error) {
     console.error("[Email] Failed to send email:", error);
     return { success: false, error: String(error) };
@@ -55,7 +181,7 @@ export async function sendEmail(
 }
 
 /**
- * Send payment receipt email
+ * Send payment receipt email.
  */
 export async function sendPaymentReceiptEmail(
   email: string,
@@ -63,27 +189,14 @@ export async function sendPaymentReceiptEmail(
   paymentAmount: number,
   paymentId: string,
   queuePosition: number
-) {
-  if (!SENDGRID_API_KEY) {
-    console.warn("[Email] SendGrid API key not configured, skipping email");
-    return { success: false, error: "SendGrid not configured" };
-  }
-
+): Promise<{ success: boolean; error?: string }> {
   try {
-    const msg = {
+    return await dispatch({
       to: email,
-      from: {
-        email: SENDER_EMAIL,
-        name: SENDER_NAME,
-      },
       subject: "✈️ Payment Confirmed - Your Boarding Pass is Ready",
       html: generatePaymentReceiptHTML(name, paymentAmount, paymentId, queuePosition),
       text: generatePaymentReceiptText(name, paymentAmount, paymentId, queuePosition),
-    };
-
-    await sgMail.send(msg);
-    console.log(`[Email] Payment receipt sent to ${email}`);
-    return { success: true };
+    });
   } catch (error) {
     console.error("[Email] Failed to send payment receipt:", error);
     return { success: false, error: String(error) };
@@ -104,30 +217,16 @@ export async function sendBoardingPassEmail(
   name: string,
   queuePosition: number,
   giftLinkUrl?: string
-) {
-  if (!SENDGRID_API_KEY) {
-    console.warn("[Email] SendGrid API key not configured, skipping email");
-    return { success: false, error: "SendGrid not configured" };
-  }
-
-  // Fall back to the environment variable if no explicit value is passed
+): Promise<{ success: boolean; error?: string }> {
   const resolvedGiftLink = giftLinkUrl ?? process.env.BEEHIIV_GIFT_LINK_URL;
 
   try {
-    const msg = {
+    return await dispatch({
       to: email,
-      from: {
-        email: SENDER_EMAIL,
-        name: SENDER_NAME,
-      },
       subject: "🎫 Your Boarding Pass - You're on the Waitlist!",
       html: generateBoardingPassHTML(name, queuePosition, resolvedGiftLink),
       text: generateBoardingPassText(name, queuePosition, resolvedGiftLink),
-    };
-
-    await sgMail.send(msg);
-    console.log(`[Email] Boarding pass sent to ${email}`);
-    return { success: true };
+    });
   } catch (error) {
     console.error("[Email] Failed to send boarding pass:", error);
     return { success: false, error: String(error) };
@@ -135,7 +234,7 @@ export async function sendBoardingPassEmail(
 }
 
 /**
- * Send internal signup notification to admin addresses
+ * Send internal signup notification to admin addresses.
  */
 export async function sendInternalNotification(
   userEmail: string,
@@ -143,14 +242,8 @@ export async function sendInternalNotification(
   tier: "paid" | "free",
   amountPaid?: number
 ): Promise<{ success: boolean; error?: string }> {
-  if (!SENDGRID_API_KEY) {
-    console.warn("[Email] SendGrid API key not configured, skipping internal notification");
-    return { success: false, error: "SendGrid not configured" };
-  }
-
   const signupDate = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
   const tierLabel = tier === "paid" ? `Paid ($${((amountPaid || 1) / 100).toFixed(2)})` : "Free";
-
   const subject = `[New Signup] ${firstName || userEmail} — ${tierLabel} — ${signupDate}`;
   const html = `
     <h2>New Signup on The Ultimate Journey</h2>
@@ -159,19 +252,25 @@ export async function sendInternalNotification(
       <tr><td style="padding:4px 12px 4px 0; color:#999;">Name</td><td style="padding:4px 0;">${firstName || "—"}</td></tr>
       <tr><td style="padding:4px 12px 4px 0; color:#999;">Tier</td><td style="padding:4px 0;">${tierLabel}</td></tr>
       <tr><td style="padding:4px 12px 4px 0; color:#999;">Date</td><td style="padding:4px 0;">${signupDate}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0; color:#999;">Provider</td><td style="padding:4px 0;">${activeProvider()}</td></tr>
     </table>
   `;
 
   try {
-    await sgMail.send({
-      to: ["k.clark7@gmail.com", "support@thispagedoesnotexist12345.com"],
-      from: { email: SENDER_EMAIL, name: SENDER_NAME },
+    const result = await dispatch({
+      to: "k.clark7@gmail.com",
       subject,
       html,
-      text: `New Signup: ${userEmail} | ${tierLabel} | ${signupDate}`,
+      text: `New Signup: ${userEmail} | ${tierLabel} | ${signupDate} | via ${activeProvider()}`,
     });
-    console.log(`[Email] Internal notification sent for ${userEmail}`);
-    return { success: true };
+    // Also send to support alias
+    await dispatch({
+      to: "support@thispagedoesnotexist12345.com",
+      subject,
+      html,
+      text: `New Signup: ${userEmail} | ${tierLabel} | ${signupDate} | via ${activeProvider()}`,
+    });
+    return result;
   } catch (error) {
     console.error("[Email] Failed to send internal notification:", error);
     return { success: false, error: String(error) };
@@ -179,12 +278,9 @@ export async function sendInternalNotification(
 }
 
 // ---------------------------------------------------------------------------
-// Template generators
+// Template generators (unchanged from original)
 // ---------------------------------------------------------------------------
 
-/**
- * Generate payment receipt HTML email
- */
 function generatePaymentReceiptHTML(
   name: string,
   amount: number,
@@ -218,63 +314,29 @@ function generatePaymentReceiptHTML(
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <h1>✈️ Payment Confirmed</h1>
-    </div>
+    <div class="header"><h1>✈️ Payment Confirmed</h1></div>
     <div class="content">
       <p>Hello ${name},</p>
       <p>Thank you for joining The Ultimate Journey! Your payment has been successfully processed.</p>
-      
       <div class="boarding-pass">
         <h2>Boarding Pass Details</h2>
-        <div class="detail-row">
-          <span class="detail-label">Passenger Name</span>
-          <span class="detail-value">${name}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Queue Position</span>
-          <span class="detail-value">#${queuePosition}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Flight Status</span>
-          <span class="detail-value">PRE-BOARDING</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Payment Amount</span>
-          <span class="detail-value">$${amountFormatted}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Payment ID</span>
-          <span class="detail-value">${paymentId}</span>
-        </div>
+        <div class="detail-row"><span class="detail-label">Passenger Name</span><span class="detail-value">${name}</span></div>
+        <div class="detail-row"><span class="detail-label">Queue Position</span><span class="detail-value">#${queuePosition}</span></div>
+        <div class="detail-row"><span class="detail-label">Flight Status</span><span class="detail-value">PRE-BOARDING</span></div>
+        <div class="detail-row"><span class="detail-label">Payment Amount</span><span class="detail-value">$${amountFormatted}</span></div>
+        <div class="detail-row"><span class="detail-label">Payment ID</span><span class="detail-value">${paymentId}</span></div>
       </div>
-
-      <div class="queue-position">
-        Passenger #${queuePosition}
-      </div>
-
+      <div class="queue-position">Passenger #${queuePosition}</div>
       <p>You're now on the pre-boarding list for The Ultimate Journey. We'll notify you when boarding begins.</p>
-      
-      <center>
-        <a href="${boardingPassUrl}" class="button">View Your Boarding Pass</a>
-      </center>
-
-      <p style="color: #999; font-size: 14px; margin-top: 30px;">
-        If you have any questions, please reply to this email or visit our website.
-      </p>
+      <center><a href="${boardingPassUrl}" class="button">View Your Boarding Pass</a></center>
+      <p style="color: #999; font-size: 14px; margin-top: 30px;">If you have any questions, please reply to this email or visit our website.</p>
     </div>
-    <div class="footer">
-      <p>© 2026 The Ultimate Journey. All rights reserved.</p>
-    </div>
+    <div class="footer"><p>© 2026 The Ultimate Journey. All rights reserved.</p></div>
   </div>
 </body>
-</html>
-  `;
+</html>`;
 }
 
-/**
- * Generate payment receipt plain text email
- */
 function generatePaymentReceiptText(
   name: string,
   amount: number,
@@ -282,9 +344,7 @@ function generatePaymentReceiptText(
   queuePosition: number
 ): string {
   const amountFormatted = (amount / 100).toFixed(2);
-
-  return `
-Hello ${name},
+  return `Hello ${name},
 
 Thank you for joining The Ultimate Journey! Your payment has been successfully processed.
 
@@ -302,26 +362,17 @@ View your boarding pass: ${getBoardingPassUrl(queuePosition)}
 
 If you have any questions, please reply to this email.
 
-© 2026 The Ultimate Journey. All rights reserved.
-  `;
+© 2026 The Ultimate Journey. All rights reserved.`;
 }
 
-/**
- * Generate boarding pass HTML email (for waitlist without payment).
- *
- * When giftLinkUrl is provided, a "Claim your gifted dashboard" button is
- * rendered below the primary boarding-pass CTA.
- */
 function generateBoardingPassHTML(
   name: string,
   queuePosition: number,
   giftLinkUrl?: string
 ): string {
   const boardingPassUrl = getBoardingPassUrl(queuePosition);
-
   const giftBlock = giftLinkUrl
-    ? `
-      <div style="margin-top: 24px; text-align: center;">
+    ? `<div style="margin-top: 24px; text-align: center;">
         <p style="color: #ccc; font-size: 14px; margin-bottom: 12px;">
           🎁 As a thank-you for joining early, here's a free copy of the TUJ Dashboard V2:
         </p>
@@ -355,75 +406,38 @@ function generateBoardingPassHTML(
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <h1>🎫 Welcome Aboard!</h1>
-    </div>
+    <div class="header"><h1>🎫 Welcome Aboard!</h1></div>
     <div class="content">
       <p>Hello ${name},</p>
       <p>You've successfully joined The Ultimate Journey waitlist!</p>
-      
       <div class="boarding-pass">
         <h2>Your Boarding Pass</h2>
-        <div class="detail-row">
-          <span class="detail-label">Passenger Name</span>
-          <span class="detail-value">${name}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Queue Position</span>
-          <span class="detail-value">#${queuePosition}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Flight Status</span>
-          <span class="detail-value">PRE-BOARDING</span>
-        </div>
+        <div class="detail-row"><span class="detail-label">Passenger Name</span><span class="detail-value">${name}</span></div>
+        <div class="detail-row"><span class="detail-label">Queue Position</span><span class="detail-value">#${queuePosition}</span></div>
+        <div class="detail-row"><span class="detail-label">Flight Status</span><span class="detail-value">PRE-BOARDING</span></div>
       </div>
-
-      <div class="queue-position">
-        Passenger #${queuePosition}
-      </div>
-
+      <div class="queue-position">Passenger #${queuePosition}</div>
       <p>You're now on the pre-boarding list. We'll notify you when boarding begins and exclusive content becomes available.</p>
-      
-      <center>
-        <a href="${boardingPassUrl}" class="button">View Your Boarding Pass</a>
-      </center>
-
+      <center><a href="${boardingPassUrl}" class="button">View Your Boarding Pass</a></center>
       ${giftBlock}
-
-      <p style="color: #999; font-size: 14px; margin-top: 30px;">
-        Invite your friends to join The Ultimate Journey and move up the queue!
-      </p>
+      <p style="color: #999; font-size: 14px; margin-top: 30px;">Invite your friends to join The Ultimate Journey and move up the queue!</p>
     </div>
-    <div class="footer">
-      <p>© 2026 The Ultimate Journey. All rights reserved.</p>
-    </div>
+    <div class="footer"><p>© 2026 The Ultimate Journey. All rights reserved.</p></div>
   </div>
 </body>
-</html>
-  `;
+</html>`;
 }
 
-/**
- * Generate boarding pass plain text email.
- *
- * When giftLinkUrl is provided, a gift dashboard claim line is appended.
- */
 function generateBoardingPassText(
   name: string,
   queuePosition: number,
   giftLinkUrl?: string
 ): string {
   const giftSection = giftLinkUrl
-    ? `
-🎁 GIFTED DASHBOARD
-===================
-As a thank-you for joining early, claim your free copy of the TUJ Dashboard V2:
-${giftLinkUrl}
-`
+    ? `\n🎁 GIFTED DASHBOARD\n===================\nAs a thank-you for joining early, claim your free copy of the TUJ Dashboard V2:\n${giftLinkUrl}\n`
     : "";
 
-  return `
-Hello ${name},
+  return `Hello ${name},
 
 You've successfully joined The Ultimate Journey waitlist!
 
@@ -433,12 +447,11 @@ Passenger Name: ${name}
 Queue Position: #${queuePosition}
 Flight Status: PRE-BOARDING
 
-You're now on the pre-boarding list. We'll notify you when boarding begins and exclusive content becomes available.
+You're now on the pre-boarding list. We'll notify you when boarding begins.
 
 View your boarding pass: ${getBoardingPassUrl(queuePosition)}
 ${giftSection}
 Invite your friends to join The Ultimate Journey and move up the queue!
 
-© 2026 The Ultimate Journey. All rights reserved.
-  `;
+© 2026 The Ultimate Journey. All rights reserved.`;
 }

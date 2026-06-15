@@ -143,7 +143,7 @@ describe("Email Service", () => {
       const { sendBoardingPassEmail } = await import("./email");
       const result = await sendBoardingPassEmail("passenger@example.com", "Jane Passenger", 7);
 
-      expect(result).toEqual({ success: true });
+      expect(result.success).toBe(true);
       expect(sgMail.default.send).toHaveBeenCalledTimes(1);
 
       const [message] = vi.mocked(sgMail.default.send).mock.calls[0];
