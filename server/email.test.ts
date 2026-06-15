@@ -138,7 +138,7 @@ describe("Email Service", () => {
 
     it("uses APP_BASE_URL for boarding-pass links so app routes do not have to target the Beehiiv newsletter domain", async () => {
       process.env.APP_BASE_URL = "https://app.example.com/";
-      process.env.BEEHIIV_GIFT_LINK_URL = "https://files.example.com/dashboard-v2.xlsx";
+      process.env.BEEHIIV_GIFT_LINK_URL = "https://files.example.com/dashboard-v5-departure-ready.xlsx";
 
       const { sendBoardingPassEmail } = await import("./email");
       const result = await sendBoardingPassEmail("passenger@example.com", "Jane Passenger", 7);
@@ -149,8 +149,8 @@ describe("Email Service", () => {
       const [message] = vi.mocked(sgMail.default.send).mock.calls[0];
       expect(message.html).toContain('href="https://app.example.com/?boarding=7"');
       expect(message.text).toContain("View your boarding pass: https://app.example.com/?boarding=7");
-      expect(message.html).toContain('href="https://files.example.com/dashboard-v2.xlsx"');
-      expect(message.text).toContain("https://files.example.com/dashboard-v2.xlsx");
+      expect(message.html).toContain('href="https://files.example.com/dashboard-v5-departure-ready.xlsx"');
+      expect(message.text).toContain("https://files.example.com/dashboard-v5-departure-ready.xlsx");
     });
 
     it("falls back to VITE_APP_URL when APP_BASE_URL is not configured", async () => {
