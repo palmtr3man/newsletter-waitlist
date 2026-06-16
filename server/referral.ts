@@ -177,6 +177,6 @@ export async function getReferralStats(waitlistEntryId: number) {
  * Get referral link for sharing
  */
 export function getReferralLink(referralCode: string): string {
-  const baseUrl = process.env.VITE_APP_URL || "https://newsletter.thispagedoesnotexist12345.us";
+  const baseUrl = (process.env.APP_BASE_URL || process.env.VITE_APP_URL || "https://newsletter.thispagedoesnotexist12345.us").replace(/\/$/, "");
   return `${baseUrl}?ref=${referralCode}`;
 }
